@@ -1,5 +1,6 @@
 # cycle-async-driver
-Helper that allows you to get rid of boilerplate code when creating cycle.js async requests based drivers.
+Higher order factory for creating [cycle.js](cycle.js.org) async request based drivers.
+Allows you almost completely eliminate boilerplate code for this kind of drivers.
 
 ## What is that?
 Lets say you want to create simple (node) File System readFile driver: 
@@ -91,8 +92,8 @@ export function makeFileReadDriver (options) {
 
 ##With `cycle-async-driver`
 
-But actually it could a little bit be simpler. With `cycle-async-driver` helper 
-you can **eliminate 80% of boilerplate** from your *lazy* File System readFile driver:
+But actually it could be a little bit simpler. With `cycle-async-driver` 
+you can **eliminate 3/4 of boilerplate** from your *lazy* File System readFile driver:
 
 ```js
 import {Observable as O} from 'rx'
@@ -135,7 +136,7 @@ export const makeReadFileDriver = (options) =>
 
 So what do you get using this helper to create your *async request/response* drivers:
 
-* get rid of up to 80% of boilerplate code of your driver
+* get rid of boilerplate code in your driver
 * may be sure that you get your *lazy/eager* "metastream" of responses
 * may be sure that standard *isolate* mechanics for your driver works.
 * need just to ensure (to test) you technical domain driver logic.
@@ -145,7 +146,7 @@ Options passed to `createDriver` helper:
 * **createResponse$** (required) - function that takes `request` and returns `response$` 
 * **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`
 * **normalizeRequest** (default: `_ => _`) - function of `request` normalization
-* **eager** (default: `true`) - make 
+* **eager** (default: `true`) - makes `response$` *eager* (starts anyway immediately) or *lazy* (starts when has active subscriptions) 
 * **isolate** (default: `true`) - build-in `isolate` mechanics
 * **isolateProp** (default: `_namespace`) - prop name that is attached to request object to *isolate* it
 * **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (in terms if not object)
