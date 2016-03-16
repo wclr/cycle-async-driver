@@ -1,5 +1,5 @@
 # cycle-async-driver
-Higher order factory for creating [cycle.js](cycle.js.org) async request based drivers.
+Higher order factory for creating [cycle.js](http://cycle.js.org) async request based drivers.
 Allows you almost completely eliminate boilerplate code for this kind of drivers.
 
 ## What is that?
