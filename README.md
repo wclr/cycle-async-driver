@@ -7,7 +7,7 @@ Lets say you want to create simple (node) File System readFile driver:
 * you get responses (from source) like `{data: FILEDATA, stats: FILESTATS}`
 
 Or maybe you want to create some other *async driver* of the same type `(request) -> async response` 
-that make queries to **database/storage/queue**. 
+that makes queries to **database/storage/queue**. 
 
 Basically in this case you:
 * probably want responses from driver be a "metastream" of responses (as they are async - witch response is a stream itself)
@@ -20,6 +20,9 @@ which basically has the same *async request/response* nature and end up with som
 FS readFile driver:
 
 ```js
+import {Observable as O} from 'rx'
+import fs from 'fs'
+
 const isolateSink = (request$, scope) => {
   return request$.map(req => {
     if (typeof req === 'string') {
@@ -88,7 +91,7 @@ export function makeFileReadDriver (options) {
 
 ##With `cycle-async-driver`
 
-But actually it could much be much simpler. With `cycle-async-driver` helper 
+But actually it could a little bit be simpler. With `cycle-async-driver` helper 
 you can **eliminate 80% of boilerplate** from your *lazy* File System readFile driver:
 
 ```js
@@ -116,7 +119,7 @@ export const makeReadFileDriver = (options) =>
   })
 ```
 
-Or even more simple in basic case (with standard `createDriver` options):
+Or even simpler in basic case with standard `createDriver` options:
 ```js
 export const makeReadFileDriver = (options) => 
   createDriver((request) => {
@@ -135,7 +138,7 @@ So what do you get using this helper to create your *async request/response* dri
 * get rid of up to 80% of boilerplate code of your driver
 * may be sure that you get your *lazy/eager* "metastream" of responses
 * may be sure that standard *isolate* mechanics for your driver works.
-* need just to ensure that (to test) you technical domain driver logic getting actual response.
+* need just to ensure (to test) you technical domain driver logic.
 
 ##Options 
 Options passed to `createDriver` helper:
