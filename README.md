@@ -2,18 +2,20 @@
 Helper that allows you to get rid of boilerplate code when creating cycle.js async requests based drivers.
 
 ## What is that?
-Lets say you want to create simple (node) File System readFile driver, 
-You send requests to driver `{path: 'path/to/file', stats: true}` 
-and get responses like `{data: FILEDATA, stats: FILESTATS}`
+Lets say you want to create simple (node) File System readFile driver: 
+* you send requests (to sink) like `{path: 'path/to/file', stats: true}` 
+* you get responses (from source) like `{data: FILEDATA, stats: FILESTATS}`
 
-Or maybe some other async driver of the same type `(request) -> async response` like queries to database/storage/queue. 
+Or maybe you want to create some other *async driver* of the same type `(request) -> async response` 
+that make queries to **database/storage/queue**. 
 
 Basically in this case you:
-* probably want responses from driver be a "metastream" (as they are async)
+* probably want responses from driver be a "metastream" of responses (as they are async - witch response is a stream itself)
 * may want it either *lazy* or *eager*
 * may want build-in standard *isolate* mechanics
 
-How to create such driver? You probably go to source code of standard [cycle HTTP driver] 
+How do you create such driver? If you do it first time probably go to source code of standard 
+[cycle HTTP driver](https://github.com/cyclejs/http/blob/master/src/http-driver.js) 
 which basically has the same *async request/response* nature and end up with something like this for your 
 FS readFile driver:
 
@@ -67,7 +69,7 @@ export function makeFileReadDriver (options) {
           response$ = response$.replay(null, 1)
           response$.connect()
         }
-        Object.defineProperty(response$, requestProp, {
+        Object.defineProperty(response$, 'request', {
           value: reqOptions,
           writable: false
         })
@@ -86,7 +88,8 @@ export function makeFileReadDriver (options) {
 
 ##With `cycle-async-driver`
 
-But actually it could much be simpler with `cycle-async-driver` to have *lazy* File System readFile driver:
+But actually it could much be much simpler. With `cycle-async-driver` helper 
+you can **eliminate 80% of boilerplate** from your *lazy* File System readFile driver:
 
 ```js
 import {Observable as O} from 'rx'
@@ -129,6 +132,7 @@ export const makeReadFileDriver = (options) =>
 
 So what do you get using this helper to create your *async request/response* drivers:
 
+* You get rid of up to 80% of boilerplate code
 * You may be sure that you get your *lazy/eager* "metastream" of responses
 * You may be sure that standard *isolate* mechanics for your driver works.
 * You need just to be sure in (to test) you technical domain driver logic for getting response.
@@ -144,6 +148,9 @@ Options passed to `createDriver` helper:
 * **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (in terms if not object)
 * **isolateSink** - use custom `isolateSink` method
 * **isolateSource** - use custom `isolateSource` method
+
+##Install 
+`npm install cycle-async-driver -S`
 
 ## Tests
 ```
