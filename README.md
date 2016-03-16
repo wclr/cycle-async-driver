@@ -11,10 +11,10 @@ that make queries to **database/storage/queue**.
 
 Basically in this case you:
 * probably want responses from driver be a "metastream" of responses (as they are async - witch response is a stream itself)
-* may want it either *lazy* or *eager*
-* may want build-in standard *isolate* mechanics
+* may want it either *lazy* (start only when response$ has active subscribers) or *eager* (do request anyway immediately)
+* may want build-in standard *isolate* mechanics (provided by `@cycle/isolate`)
 
-How do you create such driver? If you do it first time probably go to source code of standard 
+How do you create such driver? If you do it first time, you probably go to source code of official 
 [cycle HTTP driver](https://github.com/cyclejs/http/blob/master/src/http-driver.js) 
 which basically has the same *async request/response* nature and end up with something like this for your 
 FS readFile driver:
@@ -132,10 +132,10 @@ export const makeReadFileDriver = (options) =>
 
 So what do you get using this helper to create your *async request/response* drivers:
 
-* You get rid of up to 80% of boilerplate code
-* You may be sure that you get your *lazy/eager* "metastream" of responses
-* You may be sure that standard *isolate* mechanics for your driver works.
-* You need just to be sure in (to test) you technical domain driver logic for getting response.
+* get rid of up to 80% of boilerplate code of your driver
+* may be sure that you get your *lazy/eager* "metastream" of responses
+* may be sure that standard *isolate* mechanics for your driver works.
+* need just to ensure that (to test) you technical domain driver logic getting actual response.
 
 ##Options 
 Options passed to `createDriver` helper:
