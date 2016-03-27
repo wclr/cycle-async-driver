@@ -98,13 +98,13 @@ you can **eliminate 3/4 of boilerplate** from your *lazy* File System readFile d
 ```js
 import {Observable as O} from 'rx'
 import fs from 'fs'
-import {createDriver} from 'cycle-async-driver'
+import {createAsyncDriver} from 'cycle-async-driver'
 
 const normalize = (path) => 
   typeof path == 'string' ? {path} : path                        
 
 export const makeReadFileDriver = (options) =>
-  createDriver({
+  createAsyncDriver({
     eager: false,
     createResponse: (request) => {
       let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
@@ -120,10 +120,10 @@ export const makeReadFileDriver = (options) =>
   })
 ```
 
-Or even simpler in basic case with standard `createDriver` options:
+Or even simpler in basic case with standard `createAsyncDriver` options:
 ```js
 export const makeReadFileDriver = (options) => 
-  createDriver((request) => {
+  createAsyncDriver((request, callback) => {
       let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
       return options.stats || options.stats
         ? O.combineLatest([
@@ -134,19 +134,43 @@ export const makeReadFileDriver = (options) =>
     })  
 ```
 
+You may use also create driver using old node callback style returns, if you like this, 
+`cycle-async-driver` will create observable response$ for you:
+```js
+export const makeReadFileDriver = (options) => 
+  createAsyncDriver((request, callback) => {
+      if (options.stats || options.stats){
+        fs.stat(request.path, (err, stats) => {
+          err 
+            ? callback(err)
+            : fs.readFile(request.path, (err, data) => {
+              callback(err, {data, stats})
+            })
+        })
+      } else {
+        fs.readFile(request.path, (err, data) => {
+           callback(err, {data})
+        })
+      }  
+    })  
+```
+Instead of using callback you also may return *native* `Promise` from `getResponse` function.
+
 So what do you get using this helper to create your *async request/response* drivers:
 
 * get rid of boilerplate code in your driver
-* may be sure that you get your *lazy/eager* "metastream" of responses
+* may be sure that you get your *eager/lasy* "metastream" of responses
 * may be sure that standard *isolate* mechanics for your driver works.
-* need just to ensure (to test) you technical domain driver logic.
+* need just to ensure (to test) you technical domain driver logic
+* it is also great for creating **mock drivers for your tests**
 
 ##Options 
 Options passed to `createDriver` helper:
-* **createResponse$** (required) - function that takes `request` and returns `response$` 
+* **createResponse$** (required, if no **getResponse**) - function that takes `request` and returns `response$`
+* **getResponse** (required, if no **createResponse$**) - function that takes `request` and returns `Promise` or uses second passed `callback` param to return callback in node style.
 * **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`
 * **normalizeRequest** (default: `_ => _`) - function of `request` normalization
-* **eager** (default: `true`) - makes `response$` *eager* (starts anyway immediately) or *lazy* (starts when has active subscriptions) 
+* **eager** (default: `true`) - makes `response$` *eager* (hot, starts immediately) or *lazy* (cold, starts when has active subscriptions) 
 * **isolate** (default: `true`) - build-in `isolate` mechanics
 * **isolateProp** (default: `_namespace`) - prop name that is attached to request object to *isolate* it
 * **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (in terms if not object)

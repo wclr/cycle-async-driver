@@ -10,6 +10,19 @@ var simpleDriver = createDriver((request) =>
   })
 )
 
+var simpleDriverFromCallback = createDriver((request, cb) => {
+  setTimeout(() => cb(null, 'async ' + request.name), 10)
+  // return undefined
+})
+
+var simpleDriverFromPromise = createDriver({
+  getResponse: (request, cb) =>
+    // return promise
+    new Promise(resolve =>
+      setTimeout(() => resolve('async ' + request.name), 10)
+    ) 
+})
+
 var asyncDriver = createDriver({
   createResponse$: (request) =>
     O.create(observer => {
@@ -25,7 +38,7 @@ var asyncDriver = createDriver({
     typeof name === 'string' ? {name} : name
 })
 
-test('Check basic request with simple driver', (t) => {
+test('Basic request with simple driver', (t) => {
   const main = ({async}) => {
     return {
       async: O.just({name: 'John'}),
@@ -43,7 +56,43 @@ test('Check basic request with simple driver', (t) => {
   })
 })
 
-test('Check basic request', (t) => {
+test('Basic request with simple driver (from callback)', (t) => {
+  const main = ({async}) => {
+    return {
+      async: O.just({name: 'John'}),
+      result: async.switch()
+    }
+  }
+  run(main, {
+    async: simpleDriverFromCallback,
+    result: (response$) => {
+      response$.subscribe(r => {
+        t.is(r, 'async John')
+        t.end()
+      })
+    }
+  })
+})
+
+test('Basic request with simple driver (from promise)', (t) => {
+  const main = ({async}) => {
+    return {
+      async: O.just({name: 'John'}),
+      result: async.switch()
+    }
+  }
+  run(main, {
+    async: simpleDriverFromPromise,
+    result: (response$) => {
+      response$.subscribe(r => {
+        t.is(r, 'async John')
+        t.end()
+      })
+    }
+  })
+})
+
+test('Basic request', (t) => {
   const main = ({async}) => {
     return {
       async: O.just('John'),
@@ -61,7 +110,7 @@ test('Check basic request', (t) => {
   })
 })
 
-test('Check two isolated requests', (t) => {
+test('Two isolated requests', (t) => {
   const SendQuery = ({params, async}) => {
     return {
       async: O.just(params),

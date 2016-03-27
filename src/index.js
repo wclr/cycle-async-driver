@@ -1,6 +1,35 @@
-export const createDriver = (options) => {
+import {Observable as O} from 'rx'
+
+// not using `instanceOf` because for linked npm modules
+// `Observable` and `Promise` will be different
+export const isObservable = (response$) =>
+  typeof response$.subscribe === 'function'
+
+export const isPromise = (response$) =>
+  typeof response$.then === 'function'
+
+const createResponse$FromGetResponse = (getResponse, reqOptions) => {
+  let p
+  let promise = new Promise((resolve, reject) => {
+    p = {resolve, reject}
+  })
+  let callback = (err, result) => {
+    err ? p.reject(err) : p.resolve(result)
+  }
+  let response$ = getResponse(reqOptions, callback)
+  if (!response$ || !isObservable(response$)){
+    if (response$ && isPromise(response$)) {
+      promise = response$
+    }
+    response$ = O.fromPromise(promise)
+  }
+  return response$
+}
+
+export const createAsyncDriver = (options) => {
   let {
     createResponse$,
+    getResponse,
     requestProp = 'request',
     normalizeRequest = _ => _,
     eager = true,
@@ -12,9 +41,9 @@ export const createDriver = (options) => {
   } = options
 
   if (typeof options == 'function'){
-    createResponse$ = options
-  } else if (!createResponse$) {
-    throw new Error(`createResponse$ method should be provided.`)    
+    getResponse = options
+  } else if (!createResponse$ && !getResponse) {
+    throw new Error(`'createResponse$' or 'getResponse' method should be provided.`)
   }
 
   function _isolateSink(request$, scope) {
@@ -40,7 +69,12 @@ export const createDriver = (options) => {
     let response$$ = request$
       .map(request => {
         const reqOptions = normalizeRequest(request)
-        let response$ = createResponse$(reqOptions)
+        let response$
+        if (createResponse$){
+          response$ = createResponse$(reqOptions)
+        } else {
+          response$ = createResponse$FromGetResponse(getResponse, reqOptions)
+        }
         if (typeof reqOptions.eager === 'boolean' ? reqOptions.eager : eager) {
           response$ = response$.replay(null, 1)
           response$.connect()
@@ -62,3 +96,7 @@ export const createDriver = (options) => {
     return response$$
   }
 }
+
+export {createAsyncDriver as createDriver}
+export default createAsyncDriver
+
