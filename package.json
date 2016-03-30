@@ -8,7 +8,8 @@
     "build": "babel src/index.js -o lib/index.js",
     "build-watch": "babel src/index.js -w -o lib/index.js",
     "test": "node -r babel-register test/test.js",
-    "test-dev": "node-dev --respawn -r babel-register test/test.js"
+    "test-dev": "node-dev --respawn -r babel-register test/test.js",
+    "prepublish": "npm run clean && npm run build"
   },
   "author": "whitecolor",
   "license": "ISC",
