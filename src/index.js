@@ -26,7 +26,7 @@ const createResponse$FromGetResponse = (getResponse, reqOptions) => {
   return response$
 }
 
-export const createAsyncDriver = (options) => {
+export const makeAsyncDriver = (options) => {
   let {
     createResponse$,
     getResponse,
@@ -97,6 +97,6 @@ export const createAsyncDriver = (options) => {
   }
 }
 
-export {createAsyncDriver as createDriver}
-export default createAsyncDriver
+export {makeAsyncDriver as createDriver}
+export default makeAsyncDriver
 

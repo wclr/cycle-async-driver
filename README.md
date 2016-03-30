@@ -98,13 +98,13 @@ you can **eliminate 3/4 of boilerplate** from your *lazy* File System readFile d
 ```js
 import {Observable as O} from 'rx'
 import fs from 'fs'
-import {createAsyncDriver} from 'cycle-async-driver'
+import {makeAsyncDriver} from 'cycle-async-driver'
 
 const normalize = (path) => 
   typeof path == 'string' ? {path} : path                        
 
 export const makeReadFileDriver = (options) =>
-  createAsyncDriver({
+  makeAsyncDriver({
     eager: false,
     createResponse: (request) => {
       let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
@@ -120,10 +120,10 @@ export const makeReadFileDriver = (options) =>
   })
 ```
 
-Or even simpler in basic case with standard `createAsyncDriver` options:
+Or even simpler in basic case with standard `makeAsyncDriver` options:
 ```js
 export const makeReadFileDriver = (options) => 
-  createAsyncDriver((request, callback) => {
+  makeAsyncDriver((request, callback) => {
       let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
       return options.stats || options.stats
         ? O.combineLatest([
@@ -138,7 +138,7 @@ You may use also create driver using old node callback style returns, if you lik
 `cycle-async-driver` will create observable response$ for you:
 ```js
 export const makeReadFileDriver = (options) => 
-  createAsyncDriver((request, callback) => {
+  makeAsyncDriver((request, callback) => {
       if (options.stats || options.stats){
         fs.stat(request.path, (err, stats) => {
           err 
@@ -165,7 +165,7 @@ So what do you get using this helper to create your *async request/response* dri
 * it is also great for creating **mock drivers for your tests**
 
 ##Options 
-Options passed to `createDriver` helper:
+Options passed to `makeAsyncDriver` helper:
 * **createResponse$** (required, if no **getResponse**) - function that takes `request` and returns `response$`
 * **getResponse** (required, if no **createResponse$**) - function that takes `request` and returns `Promise` or uses second passed `callback` param to return callback in node style.
 * **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`

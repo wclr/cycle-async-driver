@@ -1,21 +1,21 @@
 import {run} from '@cycle/core'
-import {createDriver} from '../lib/index'
+import {makeAsyncDriver} from '../lib/index'
 import {Observable as O} from 'rx'
 import isolate from '@cycle/isolate'
 import test from 'tape'
 
-var simpleDriver = createDriver((request) =>
+var simpleDriver = makeAsyncDriver((request) =>
   O.create(observer => {
     setTimeout(() => observer.onNext('async ' + request.name), 10)
   })
 )
 
-var simpleDriverFromCallback = createDriver((request, cb) => {
+var simpleDriverFromCallback = makeAsyncDriver((request, cb) => {
   setTimeout(() => cb(null, 'async ' + request.name), 10)
   // return undefined
 })
 
-var simpleDriverFromPromise = createDriver({
+var simpleDriverFromPromise = makeAsyncDriver({
   getResponse: (request, cb) =>
     // return promise
     new Promise(resolve =>
@@ -23,7 +23,7 @@ var simpleDriverFromPromise = createDriver({
     ) 
 })
 
-var asyncDriver = createDriver({
+var asyncDriver = makeAsyncDriver({
   createResponse$: (request) =>
     O.create(observer => {
       setTimeout(() => observer.onNext({asyncName: 'async ' + request.name}), 10)
