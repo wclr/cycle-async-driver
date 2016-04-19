@@ -31,7 +31,7 @@ var asyncDriver = makeAsyncDriver({
       setTimeout(() => observer.onNext({asyncName: 'async ' + request.name}), 10)
     }),
   requestProp: 'query',
-  normalizeRequest: (name) =>
+  normalize: (name) =>
     typeof name ==='string'
       ? {name: name.toUpperCase()}
       : {...name, name: name.name.toUpperCase()},

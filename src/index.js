@@ -36,13 +36,19 @@ export const makeAsyncDriver = (options) => {
     eager = true,
     isolate = true,
     isolateProp = '_namespace',
-    isolateMap = _ => _,
+    isolateMap = null,
     isolateSink,
     isolateSource
   } = options
 
   if (responseProp === true){
     responseProp = 'response'
+  }
+  if (typeof normalizeRequest !== 'function'){
+    throw new Error(`'normalize' option should be a function.`)
+  }
+  if (normalizeRequest && !isolateMap){
+    isolateMap = normalizeRequest
   }
 
   if (typeof options == 'function'){

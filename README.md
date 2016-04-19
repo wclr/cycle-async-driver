@@ -169,12 +169,14 @@ Options passed to `makeAsyncDriver` helper:
 * **createResponse$** (required, if no **getResponse**) - function that takes `request` and returns `response$`
 * **getResponse** (required, if no **createResponse$**) - function that takes `request` and returns `Promise` or uses second passed `callback` param to return callback in node style.
 * **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`
-* **responseProp** (default: `false`) - if not `false` `response$` items form will be `{[responseProp]: ..., [requestProp]: ....}`, if set to `true` then default `response` name is used
+* **responseProp** (default: `false`) - if set to `false`, `response$` items will contain corresponding `request` 
+be wrapped in `{response: ..., request: ....}`, if this prop set to `true` 
+then default name value `response` is used.
 * **normalizeRequest** (default: `_ => _`) - function of `request` normalization
 * **eager** (default: `true`) - makes `response$` *eager* (hot, starts immediately) or *lazy* (cold, starts when has active subscriptions) 
 * **isolate** (default: `true`) - build-in `isolate` mechanics
 * **isolateProp** (default: `_namespace`) - prop name that is attached to request object to *isolate* it
-* **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (in terms if not object)
+* **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (`normalizeRequest` will be used instead)
 * **isolateSink** - use custom `isolateSink` method
 * **isolateSource** - use custom `isolateSource` method
 
