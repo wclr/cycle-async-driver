@@ -169,6 +169,7 @@ Options passed to `makeAsyncDriver` helper:
 * **createResponse$** (required, if no **getResponse**) - function that takes `request` and returns `response$`
 * **getResponse** (required, if no **createResponse$**) - function that takes `request` and returns `Promise` or uses second passed `callback` param to return callback in node style.
 * **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`
+* **responseProp** (default: `false`) - if not `false` `response$` items form will be `{[responseProp]: ..., [requestProp]: ....}`, if set to `true` then default `response` name is used
 * **normalizeRequest** (default: `_ => _`) - function of `request` normalization
 * **eager** (default: `true`) - makes `response$` *eager* (hot, starts immediately) or *lazy* (cold, starts when has active subscriptions) 
 * **isolate** (default: `true`) - build-in `isolate` mechanics

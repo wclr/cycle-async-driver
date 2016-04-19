@@ -31,6 +31,7 @@ export const makeAsyncDriver = (options) => {
     createResponse$,
     getResponse,
     requestProp = 'request',
+    responseProp = false,
     normalizeRequest = _ => _,
     eager = true,
     isolate = true,
@@ -39,6 +40,10 @@ export const makeAsyncDriver = (options) => {
     isolateSink,
     isolateSource
   } = options
+
+  if (responseProp === true){
+    responseProp = 'response'
+  }
 
   if (typeof options == 'function'){
     getResponse = options
@@ -75,6 +80,12 @@ export const makeAsyncDriver = (options) => {
         } else {
           response$ = createResponse$FromGetResponse(getResponse, reqOptions)
         }
+
+        response$ = responseProp ? response$.map(response => ({
+          [responseProp]: response,
+          [requestProp]: request
+        })) : response$
+
         if (typeof reqOptions.eager === 'boolean' ? reqOptions.eager : eager) {
           response$ = response$.replay(null, 1)
           response$.connect()
@@ -85,6 +96,7 @@ export const makeAsyncDriver = (options) => {
             writable: false
           })
         }
+
         return response$
       })
       .replay(null, 1)

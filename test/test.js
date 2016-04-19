@@ -10,9 +10,11 @@ var simpleDriver = makeAsyncDriver((request) =>
   })
 )
 
-var simpleDriverFromCallback = makeAsyncDriver((request, cb) => {
-  setTimeout(() => cb(null, 'async ' + request.name), 10)
-  // return undefined
+var simpleDriverFromCallback = makeAsyncDriver({
+  getResponse: (request, cb) => {
+    setTimeout(() => cb(null, 'async ' + request.name), 10)
+  },
+  responseProp: true
 })
 
 var simpleDriverFromPromise = makeAsyncDriver({
@@ -67,7 +69,7 @@ test('Basic request with simple driver (from callback)', (t) => {
     async: simpleDriverFromCallback,
     result: (response$) => {
       response$.subscribe(r => {
-        t.is(r, 'async John')
+        t.is(r.response, 'async John')
         t.end()
       })
     }

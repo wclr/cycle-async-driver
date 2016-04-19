@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "rimraf lib",
     "build": "babel src -d lib",
-    "build-watch": "babel -w -d lib",
+    "build-watch": "babel -w src -d lib",
     "test": "node -r babel-register test/test.js",
     "test-dev": "node-dev --respawn -r babel-register test/test.js",
     "prepublish": "npm run clean && npm run build"
