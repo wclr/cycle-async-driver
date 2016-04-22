@@ -87,10 +87,16 @@ export const makeAsyncDriver = (options) => {
           response$ = createResponse$FromGetResponse(getResponse, reqOptions)
         }
 
-        response$ = responseProp ? response$.map(response => ({
+        response$ = responseProp ? response$
+          .map(response => ({
           [responseProp]: response,
           [requestProp]: request
-        })) : response$
+        })).catch((error) => {
+              throw {
+              error,
+              [requestProp]: request
+            }
+          }) : response$
 
         if (typeof reqOptions.eager === 'boolean' ? reqOptions.eager : eager) {
           response$ = response$.replay(null, 1)
