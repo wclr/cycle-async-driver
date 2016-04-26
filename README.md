@@ -179,6 +179,49 @@ then default name value `response` is used.
 * **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (`normalizeRequest` will be used instead)
 * **isolateSink** - use custom `isolateSink` method
 * **isolateSource** - use custom `isolateSource` method
+* **selectorMethod** (default: `select`) - custom name of selector method, if `false` helper is not attached
+* **selectorProp** (default: `category`) - custom name of selector property, if`false` helper is not attached
+* **flattenHelpers** (default: ['successful', 'failed']) - custom names for flattening helpers, if`false` helpers are not attached
+
+## Selector helper
+
+## Flattening (successful, failed) helpers
+
+## External use (with other drivers)
+You can use it for example with official `HTTP` driver, like detached helper functions:  
+
+```js
+import {succesful, failed} from 'cycle-async-driver'
+...
+
+let allSuccessful$ = succesful(HTTP)
+let filteredFailed$ = failed(HTTP.filter(...))
+```
+
+Or you can attach this helpers to driver it self:
+```js
+import {attachHelpers} from 'cycle-async-driver'
+
+...
+
+const httpDriver = makeHTTPDriver({eager: true}) 
+attachHelpers(httpDriver) 
+
+...
+
+const main = ({DOM, HTTP}) => {
+  let allSuccessful$ = HTTP.succesful()
+  let filteredFailed$ = HTTP.filter(...).failed()
+  ...
+} 
+
+
+run(main, {
+  DOM: makeDOMDriver()
+  HTTP: httpDriver
+})
+```
+
 
 ##Install 
 `npm install cycle-async-driver -S`

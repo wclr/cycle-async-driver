@@ -1,5 +1,5 @@
 import {Observable as O} from 'rx'
-
+import {proxyAndKeepMethods} from './proxy-methods'
 // not using `instanceOf` because for linked npm modules
 // `Observable` and `Promise` will be different
 export const isObservable = (response$) =>
@@ -7,6 +7,61 @@ export const isObservable = (response$) =>
 
 export const isPromise = (response$) =>
   typeof response$.then === 'function'
+
+export {proxyAndKeepMethods}
+
+export const successful = (r$$, selector) => {
+  return r$$.flatMap(r$ =>
+    (selector ? r$.map(selector) : r$)
+      .catch(O.empty())
+  )
+}
+
+export const failed = (r$$, selector) => {
+  return r$$.flatMap(r$ =>
+    r$.skip().catch(e => O.of(selector ? selector(e) : e))
+  )
+}
+
+export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'failed']) => {
+  r$$[flattenHelpers[0]] = function(selector) {
+    return successful(this, selector)
+  }
+  r$$[flattenHelpers[1]] = function (selector) {
+    return failed(this, selector)
+  }
+}
+
+export const attachSelectorHelper = 
+  (r$$, {
+    selectorMethod = 'select',
+    selectorProp = 'category',
+    requestProp = 'request'
+  }) => {
+    r$$[selectorMethod] = function (match) {
+      let test = (match instanceof RegExp)
+        ? ::match.test : (_) => match === _
+      return this.filter(
+        r$ => test(r$[requestProp][selectorProp])
+      )
+    }
+    return r$$
+  }
+
+export const attachHelpers = (r$$, {flatten = true, selector = true, keepMethods = true} = {}) => {
+  flatten && attachFlattenHelpers(r$$)
+  selector && attachSelectorHelper(r$$)
+  if (keepMethods){
+    return proxyAndKeepMethods(r$$, [
+      'isolateSink',
+      'isolateSource',
+      'select',
+      'successful',
+      'failed'
+    ])
+  }
+  return r$$
+}
 
 const createResponse$FromGetResponse = (getResponse, reqOptions) => {
   let p
@@ -38,7 +93,10 @@ export const makeAsyncDriver = (options) => {
     isolateProp = '_namespace',
     isolateMap = null,
     isolateSink,
-    isolateSource
+    isolateSource,
+    selectorMethod = 'select',
+    selectorProp = 'category',
+    flattenHelpers = ['successful', 'failed']
   } = options
 
   if (responseProp === true){
@@ -71,8 +129,8 @@ export const makeAsyncDriver = (options) => {
       Array.isArray(res$[requestProp][isolateProp]) &&
       res$[requestProp][isolateProp].indexOf(scope) !== -1
     )
-    isolatedResponse$$.isolateSource = _isolateSource
-    isolatedResponse$$.isolateSink = _isolateSink
+    //isolatedResponse$$.isolateSource = _isolateSource
+    //isolatedResponse$$.isolateSink = _isolateSink
     return isolatedResponse$$
   }
 
@@ -90,11 +148,11 @@ export const makeAsyncDriver = (options) => {
         response$ = responseProp ? response$
           .map(response => ({
           [responseProp]: response,
-          [requestProp]: request
+          [requestProp]: reqOptions
         })).catch((error) => {
               throw {
               error,
-              [requestProp]: request
+              [requestProp]: reqOptions
             }
           }) : response$
 
@@ -113,14 +171,30 @@ export const makeAsyncDriver = (options) => {
       })
       .replay(null, 1)
     response$$.connect()
+
+    var methodsToKeep = []
+
     if (isolate){
       response$$.isolateSource = isolateSource || _isolateSource
       response$$.isolateSink = isolateSink || _isolateSink
+      methodsToKeep.push('isolateSink', 'isolateSource')
     }
-    return response$$
+
+    if (Array.isArray(flattenHelpers)){
+      attachFlattenHelpers(response$$, flattenHelpers)
+      methodsToKeep.push(flattenHelpers[0], flattenHelpers[1])
+    }
+    
+    if (selectorMethod && selectorProp && requestProp){
+      attachSelectorHelper(response$$, {selectorMethod, requestProp, selectorProp})
+      methodsToKeep.push(selectorMethod)
+    }
+    
+    return methodsToKeep.length
+      ? proxyAndKeepMethods(response$$, methodsToKeep)
+      : response$$
   }
 }
 
 export {makeAsyncDriver as createDriver}
 export default makeAsyncDriver
-
