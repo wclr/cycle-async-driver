@@ -38,11 +38,11 @@ export const attachSelectorHelper =
     selectorProp = 'category',
     requestProp = 'request'
   }) => {
-    r$$[selectorMethod] = function (match) {
+    r$$[selectorMethod] = function (match, property) {
       let test = (match instanceof RegExp)
         ? ::match.test : (_) => match === _
       return this.filter(
-        r$ => test(r$[requestProp][selectorProp])
+        r$ => test(r$[requestProp][property || selectorProp])
       )
     }
     return r$$

@@ -20,6 +20,8 @@ How do you create such driver? If you do it first time, you probably go to sourc
 which basically has the same *async request/response* nature and end up with something like this for your 
 FS readFile driver:
 
+## *Without* `cycle-async-driver`
+
 ```js
 import {Observable as O} from 'rx'
 import fs from 'fs'
@@ -90,7 +92,7 @@ export function makeFileReadDriver (options) {
 }
 ```
 
-##With `cycle-async-driver`
+## With `cycle-async-driver`
 
 But actually it could be a little bit simpler. With `cycle-async-driver` 
 you can **eliminate 3/4 of boilerplate** from your *lazy* File System readFile driver:
@@ -183,11 +185,33 @@ then default name value `response` is used.
 * **selectorProp** (default: `category`) - custom name of selector property, if`false` helper is not attached
 * **flattenHelpers** (default: ['successful', 'failed']) - custom names for flattening helpers, if`false` helpers are not attached
 
-## Selector helper
+## Filtering helper (`select`) 
+Useful for easier filtering responses$ by request
 
-## Flattening (successful, failed) helpers
+## Flattening helpers (successful, failed)
+Useful for dealing with async responses errors
 
-## External use (with other drivers)
+```
+const main = ({asyncDriver}) => {
+    // select only `first` category ans falures
+    const firstFailed$ = asyncDriver.select('good').failed()
+    
+    const secondSuccessul$ = async.select('second')
+    .filter(r$.request.mark[0] === 'T' )
+    .success() // notice that you can use helpers after filtering
+    
+    return {
+      // we send this requests to driver
+      asyncDriver: O.from([
+        {mark: 'BMW', category: 'first'},
+        {mark: 'Mercedess', category: 'first'},
+        {mark: 'Toyota', category: 'second'}
+      ]).delay(0),       
+    }
+  }
+```
+
+## External use of helpers (with other async drivers)
 You can use it for example with official `HTTP` driver, like detached helper functions:  
 
 ```js
