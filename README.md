@@ -2,6 +2,8 @@
 Higher order factory for creating [cycle.js](http://cycle.js.org) async request based drivers.
 Allows you almost completely eliminate boilerplate code for this kind of drivers.
 
+To put it simple: ** Create fully functional cycle.js driver from async function with callback or promise**
+
 ## What is that?
 Lets say you want to create simple (node) File System readFile driver: 
 * you send requests (to sink) like `{path: 'path/to/file', stats: true}` 
@@ -186,12 +188,19 @@ then default name value `response` is used.
 * **flattenHelpers** (default: ['successful', 'failed']) - custom names for flattening helpers, if`false` helpers are not attached
 
 ## Filtering helper (`select`) 
-Useful for easier filtering `responses$` by `request` properties
+Useful for easier filtering `responses$` by `request` properties, you can filter request object either: 
+* by default driver property (`category` by default if not set custom)
+* by provider property  (first parameter to `select`, second is match)
+* by multiple properties providing object {....}
 
-## Flattening helpers (successful, failed)
-Useful for dealing with async responses errors
+If `match` param is `RegExp` then `match.test` function will be used for testing, 
+else will property will be checked for **strict** equality.
 
-```
+## Flattening helpers (`successful`, `failed`)
+Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
+So may not bother of *catching* errors and get uninterrupted stream of *successes* or *errors*.  
+
+```js
 const main = ({asyncDriver}) => {
     // get only `first` `class` failed responses
     const firstFailed$ = asyncDriver        
@@ -199,9 +208,10 @@ const main = ({asyncDriver}) => {
         .failed((e, request) => `failed for mark ${request.mark}`) // you can provider mapping function into helper
     
     // get only `second` `class` successful responses
-    const secondSuccessul$ = async.select('class', 'second')
-    .filter(r$.request.mark[0] === 'T' )
-    .success(mapResponseYouWay) // notice that you can use helpers after filtering
+    const secondSuccessul$ = async
+    .select({'class': 'second'})
+    .filter(r$ => r$.request.mark[0] === 'T' )
+    .success((response, request) => {...}) // notice that you can use helpers after filtering
     
     return {
       // we send some requests to driver
