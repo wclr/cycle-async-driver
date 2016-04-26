@@ -193,8 +193,9 @@ Useful for easier filtering `responses$` by `request` properties, you can filter
 * by provider property  (first parameter to `select`, second is match)
 * by multiple properties providing object {....}
 
-If `match` param is `RegExp` then `match.test` function will be used for testing, 
-else will property will be checked for **strict** equality.
+If `match` param **can be `RegExp`** then `match.test` function will be used for testing,
+or it can be a **testing `function`** itself,  otherwise `request` property will be checked 
+for **strict equality** with `match` param.
 
 ## Flattening helpers (`successful`, `failed`)
 Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
@@ -228,14 +229,30 @@ const main = ({asyncDriver}) => {
 You can use it for example with official `HTTP` driver, like detached helper functions:  
 
 ```js
-import {succesful, failed} from 'cycle-async-driver'
+import {succesful, failed, select} from 'cycle-async-driver'
 ...
 
-let allSuccessful$ = succesful(HTTP)
+let allSuccessful$ = succesful(select(HTTP, 'url', '/api/users'))
 let filteredFailed$ = failed(HTTP.filter(...))
+
+// or
+
+let allSuccessful$ = HTTP
+    .let(select({method: 'POST', url: /users/}))
+    .let(succesful)
+
+let filteredFailed$ = HTTP.filter(...).let(failed)
+
+// or
+let allSuccessful$ = HTTP.let(succesful(respose => ...))
+
+let filteredFailed$ = HTTP.filter(...)
+  .let(select({method: 'POST', url: /users/}))
+  .let(failed((error, request) => ...))
+
 ```
 
-Or you can attach this helpers to driver it self:
+To use fluent API you can attach this helpers to driver it self:
 ```js
 import {attachHelpers} from 'cycle-async-driver'
 

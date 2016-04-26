@@ -1,7 +1,6 @@
 import {Observable as O} from 'rx'
 import {proxyAndKeepMethods} from './proxy-methods'
-// not using `instanceOf` because for linked npm modules
-// `Observable` and `Promise` will be different
+
 export const isObservable = (response$) =>
   typeof response$.subscribe === 'function'
 
@@ -10,17 +9,72 @@ export const isPromise = (response$) =>
 
 export {proxyAndKeepMethods}
 
-export const successful = (r$$, selector, requestProp = 'request') => {
-  return r$$.flatMap(r$ =>
-    (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
-      .catch(O.empty())
-  )
+const flattenSuccessful = (r$, selector, requestProp) =>
+  (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
+    .catch(O.empty())
+
+const flattenFailed = (r$, selector, requestProp) =>
+  r$.skip().catch(e => O.of(selector ? selector(e, r$[requestProp]) : e))
+
+const makeFlattenHelper = (flattenFn) => {
+  return function fn (...args) {
+    if (args[0] && isObservable(args[0])){
+      let r$$ = args.shift()
+      return fn.apply(null, args)(r$$)
+    }
+    let [selector, requestProp = 'request'] = args
+    return function (r$$) {
+      return r$$.flatMap(r$ => flattenFn(r$, selector, requestProp))
+    }
+  }
 }
 
-export const failed = (r$$, selector, requestProp = 'request') => {
-  return r$$.flatMap(r$ =>
-    r$.skip().catch(e => O.of(selector ? selector(e, r$[requestProp]) : e))
-  )
+export const successful = makeFlattenHelper(flattenSuccessful)
+export const failed = makeFlattenHelper(flattenFailed)
+
+const makeSelectHelper = ({
+  selectorProp = 'category',
+  requestProp = 'request'
+} = {}) => {
+  return function (property, match) {
+    if (arguments.length === 1){
+      match = property
+      property = selectorProp
+    }
+    if (!match){
+      throw new Error (`Selector helper should have \`match\` ` +
+        `param which is string, regExp, or plain object with props.`)
+    }
+    let makeTestSimple = (match) =>
+      (match instanceof RegExp)
+        ? ::match.test
+        : typeof match === 'function'
+          ? match : (_) => match === _
+    if (match.constructor === Object){
+      let props = Object.keys(match)
+      return this.filter(
+        r$ => !props.reduce((matched, prop) =>
+          matched || !makeTestSimple(match[prop])(r$[requestProp][prop])
+          , false)
+      )
+    } else {
+      let testSimple = makeTestSimple(match)
+      return this.filter(
+        r$ => testSimple(r$[requestProp][property])
+      )
+    }
+  }
+}
+
+export const select = (...args) => {
+  if (args[0] && isObservable(args[0])){
+    let r$$ = args.shift()
+    return select.apply(null, args)(r$$)
+  }
+  var helper = makeSelectHelper()
+  return function (r$$) {
+    return helper.apply(r$$, args)
+  }
 }
 
 export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'failed'], requestProp) => {
@@ -36,35 +90,10 @@ export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'faile
 export const attachSelectorHelper = 
   (r$$, {
     selectorMethod = 'select',
-    selectorProp = 'category',
-    requestProp = 'request'
+    selectorProp,
+    requestProp
   } = {}) => {
-    r$$[selectorMethod] = function (property, match) {
-      if (arguments.length == 1){
-        match = property
-        property = selectorProp
-      }
-      if (!match){
-        throw new Error (`Selector helper should have match` +
-          `param which is string, regExp, or plain object with props.`)
-      }
-      let makeTestSimple = (match) =>
-        (match instanceof RegExp)
-          ? ::match.test : (_) => match === _
-      if (match.constructor === Object){
-        let props = Object.keys(match)
-        return this.filter(
-          r$ => !props.reduce((matched, prop) =>
-              matched || !makeTestSimple(match[prop])(r$[requestProp][prop])
-          , false)
-        )
-      } else {
-        let testSimple = makeTestSimple(match)
-        return this.filter(
-          r$ => testSimple(r$[requestProp][property])
-        )
-      }
-    }
+    r$$[selectorMethod] = makeSelectHelper({selectorProp, requestProp})
     return r$$
   }
 

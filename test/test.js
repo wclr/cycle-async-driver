@@ -1,5 +1,5 @@
 import {run} from '@cycle/core'
-import {makeAsyncDriver} from '../lib/index'
+import {makeAsyncDriver, successful, failed, select} from '../lib/index'
 import {Observable as O} from 'rx'
 import isolate from '@cycle/isolate'
 import test from 'tape'
@@ -167,7 +167,7 @@ test('Two isolated requests', (t) => {
   })
 })
 
-test.only('successful and failed helpers', (t) => {
+test('successful and failed helpers', (t) => {
   let mergedCount = 0
   let successfulCount = 0
   let failedCount = 0
@@ -182,6 +182,66 @@ test.only('successful and failed helpers', (t) => {
         ({response: response + ' mapped', request})
       ),
       fail: async.failed(({error, request}) =>
+        ({error: error + ' mapped', request})
+      )
+    }
+  }
+  run(main, {
+    async: driverWithFailure,
+    merged: (response$) => {
+      var count = 0
+      response$.subscribe(r => {
+        mergedCount++
+      })
+    },
+    success: (response$) => {
+      response$.subscribe(r => {
+        successfulCount++
+        t.is(r.response, `async ${r.request.name} mapped`, 'successful response mapped')
+      })
+    },
+    fail: (error$) => {
+      error$.subscribe(r => {
+        failedCount++
+        t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
+        t.is(r.request.name, '', 'error contains request')
+      })
+    }
+  })
+  setTimeout(() => {
+    t.is(mergedCount, 2, 'merged count correct')
+    t.is(successfulCount, 4, 'successful count correct')
+    t.is(failedCount, 2, 'failed count correct')
+    t.end()
+  }, 500)
+})
+
+test('detached successful and failed helpers', (t) => {
+  let mergedCount = 0
+  let successfulCount = 0
+  let failedCount = 0
+  const main = ({async}) => {
+    return {
+      async: O.from([
+        'John',
+        'Mary',
+        {name: '', maker: true},
+        'Alex',
+        '',
+        'Jane',
+        {name: '', maker: true},
+        'Mike'
+      ]).delay(1),
+      merged: async.mergeAll().catch(O.empty()),
+      success: async
+        .filter(r$ => r$.request.name)
+        .let(select({name: (_) => !/Alex/.test(_)}))
+        .let(
+          successful(({response, request}) =>
+            ({response: response + ' mapped', request})
+          )
+        ),
+      fail: select(async, {maker: true}).let(failed).map(({error, request}) =>
         ({error: error + ' mapped', request})
       )
     }
@@ -216,6 +276,7 @@ test.only('successful and failed helpers', (t) => {
     t.end()
   }, 500)
 })
+
 
 test('select helper', (t) => {
   let selectedCount = 0
