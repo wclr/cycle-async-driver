@@ -167,7 +167,7 @@ test('Two isolated requests', (t) => {
   })
 })
 
-test('successful and failed helpers', (t) => {
+test.only('successful and failed helpers', (t) => {
   let mergedCount = 0
   let successfulCount = 0
   let failedCount = 0
@@ -214,11 +214,13 @@ test('successful and failed helpers', (t) => {
     t.is(successfulCount, 4, 'successful count correct')
     t.is(failedCount, 2, 'failed count correct')
     t.end()
-  }, 100)
+  }, 500)
 })
 
 test('select helper', (t) => {
   let selectedCount = 0
+  let selectedWithObjCount = 0
+  let selectedWithPropCount = 0
   const main = ({async}) => {
     return {
       async: O.from([
@@ -226,19 +228,34 @@ test('select helper', (t) => {
         {name: 'Alex', category: 'bad'},
         {name: 'Jane', category: 'good'}
       ]).delay(0),
-      result: async.select('good').successful()
+      selected: async.select('good'),
+      selectedWithObj: async.select({name: 'Alex'}),
+      selectedWithProp: async.select('name', 'Alex')
     }
   }
   run(main, {
     async: simpleDriver,
-    result: (response$) => {
+    selected: (response$) => {
       response$.subscribe(r => {
         selectedCount++
+      })
+    },
+    selectedWithObj: (response$) => {
+      response$.subscribe(r => {
+        selectedWithObjCount++
+      })
+    },
+    selectedWithProp: (response$) => {
+      response$.subscribe(r => {
+        selectedWithPropCount++
       })
     }
   })
   setTimeout(() => {
-    t.is(selectedCount, 2, 'selected count correct')
+    t.is(selectedCount, 2, 'selected with simple match count correct')
+    t.is(selectedWithObjCount, 1, 'selected with object match count correct')
+    t.is(selectedWithPropCount, 1, 'selected with property match count correct')
     t.end()
   }, 100)
 })
+

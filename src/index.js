@@ -10,26 +10,27 @@ export const isPromise = (response$) =>
 
 export {proxyAndKeepMethods}
 
-export const successful = (r$$, selector) => {
+export const successful = (r$$, selector, requestProp = 'request') => {
   return r$$.flatMap(r$ =>
-    (selector ? r$.map(selector) : r$)
+    (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
       .catch(O.empty())
   )
 }
 
-export const failed = (r$$, selector) => {
+export const failed = (r$$, selector, requestProp = 'request') => {
   return r$$.flatMap(r$ =>
-    r$.skip().catch(e => O.of(selector ? selector(e) : e))
+    r$.skip().catch(e => O.of(selector ? selector(e, r$[requestProp]) : e))
   )
 }
 
-export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'failed']) => {
+export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'failed'], requestProp) => {
   r$$[flattenHelpers[0]] = function(selector) {
-    return successful(this, selector)
+    return successful(this, selector, requestProp)
   }
-  r$$[flattenHelpers[1]] = function (selector) {
+  r$$[flattenHelpers[1]] = function (selector, requestProp) {
     return failed(this, selector)
   }
+  return r$$
 }
 
 export const attachSelectorHelper = 
@@ -37,18 +38,43 @@ export const attachSelectorHelper =
     selectorMethod = 'select',
     selectorProp = 'category',
     requestProp = 'request'
-  }) => {
-    r$$[selectorMethod] = function (match, property) {
-      let test = (match instanceof RegExp)
-        ? ::match.test : (_) => match === _
-      return this.filter(
-        r$ => test(r$[requestProp][property || selectorProp])
-      )
+  } = {}) => {
+    r$$[selectorMethod] = function (property, match) {
+      if (arguments.length == 1){
+        match = property
+        property = selectorProp
+      }
+      if (!match){
+        throw new Error (`Selector helper should have match` +
+          `param which is string, regExp, or plain object with props.`)
+      }
+      let makeTestSimple = (match) =>
+        (match instanceof RegExp)
+          ? ::match.test : (_) => match === _
+      if (match.constructor === Object){
+        let props = Object.keys(match)
+        return this.filter(
+          r$ => !props.reduce((matched, prop) =>
+              matched || !makeTestSimple(match[prop])(r$[requestProp][prop])
+          , false)
+        )
+      } else {
+        let testSimple = makeTestSimple(match)
+        return this.filter(
+          r$ => testSimple(r$[requestProp][property])
+        )
+      }
     }
     return r$$
   }
 
-export const attachHelpers = (r$$, {flatten = true, selector = true, keepMethods = true} = {}) => {
+export const attachHelpers = (r$$, options = {}) => {
+  if (typeof r$$ === 'function'){
+    return function () {
+      return attachHelpers(r$$.apply(r$$, arguments), options)
+    } 
+  }
+  let {flatten = true, selector = true, keepMethods = true} = options 
   flatten && attachFlattenHelpers(r$$)
   selector && attachSelectorHelper(r$$)
   if (keepMethods){
@@ -181,7 +207,7 @@ export const makeAsyncDriver = (options) => {
     }
 
     if (Array.isArray(flattenHelpers)){
-      attachFlattenHelpers(response$$, flattenHelpers)
+      attachFlattenHelpers(response$$, flattenHelpers, requestProp)
       methodsToKeep.push(flattenHelpers[0], flattenHelpers[1])
     }
     

@@ -186,27 +186,30 @@ then default name value `response` is used.
 * **flattenHelpers** (default: ['successful', 'failed']) - custom names for flattening helpers, if`false` helpers are not attached
 
 ## Filtering helper (`select`) 
-Useful for easier filtering responses$ by request
+Useful for easier filtering `responses$` by `request` properties
 
 ## Flattening helpers (successful, failed)
 Useful for dealing with async responses errors
 
 ```
 const main = ({asyncDriver}) => {
-    // select only `first` category ans falures
-    const firstFailed$ = asyncDriver.select('good').failed()
+    // get only `first` `class` failed responses
+    const firstFailed$ = asyncDriver        
+        .select('class', 'first') // if two params passed, first is treated as selector prop name
+        .failed((e, request) => `failed for mark ${request.mark}`) // you can provider mapping function into helper
     
-    const secondSuccessul$ = async.select('second')
+    // get only `second` `class` successful responses
+    const secondSuccessul$ = async.select('class', 'second')
     .filter(r$.request.mark[0] === 'T' )
-    .success() // notice that you can use helpers after filtering
+    .success(mapResponseYouWay) // notice that you can use helpers after filtering
     
     return {
-      // we send this requests to driver
+      // we send some requests to driver
       asyncDriver: O.from([
-        {mark: 'BMW', category: 'first'},
-        {mark: 'Mercedess', category: 'first'},
-        {mark: 'Toyota', category: 'second'}
-      ]).delay(0),       
+        {mark: 'BMW', class: 'first'},
+        {mark: 'Mercedess', class: 'first'},
+        {mark: 'Toyota', class: 'second'}
+      ]),       
     }
   }
 ```
@@ -234,11 +237,12 @@ attachHelpers(httpDriver)
 ...
 
 const main = ({DOM, HTTP}) => {
-  let allSuccessful$ = HTTP.succesful()
+  let usersPostSuccessful$ = HTTP
+    .select({url: /users/, method: 'POST'}) // you can use object to match more then one property in request
+    .succesful()
   let filteredFailed$ = HTTP.filter(...).failed()
   ...
 } 
-
 
 run(main, {
   DOM: makeDOMDriver()
