@@ -2,7 +2,7 @@
 Higher order factory for creating [cycle.js](http://cycle.js.org) async request based drivers.
 Allows you almost completely eliminate boilerplate code for this kind of drivers.
 
-To put it simple: ** Create fully functional cycle.js driver from async function with callback or promise**
+To put it simple: **Create fully functional cycle.js driver from async function with callback or promise**
 
 ## What is that?
 Lets say you want to create simple (node) File System readFile driver: 
@@ -97,34 +97,9 @@ export function makeFileReadDriver (options) {
 ## With `cycle-async-driver`
 
 But actually it could be a little bit simpler. With `cycle-async-driver` 
-you can **eliminate 3/4 of boilerplate** from your *lazy* File System readFile driver:
+you can **eliminate amost allof boilerplate** from your *lazy* File System readFile driver:
 
-```js
-import {Observable as O} from 'rx'
-import fs from 'fs'
-import {makeAsyncDriver} from 'cycle-async-driver'
-
-const normalize = (path) => 
-  typeof path == 'string' ? {path} : path                        
-
-export const makeReadFileDriver = (options) =>
-  makeAsyncDriver({
-    eager: false,
-    createResponse: (request) => {
-      let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
-      return options.stats || options.stats
-        ? O.combineLatest([
-        readFile$,
-        O.fromNodeCallback(fs.stat, fs)(request.path),
-      ]).map(([data, stat]) => ({data, stat}))
-        : readFile$.map(data => ({data}))
-    },
-    normalizeRequest: normalize,
-    isolateMap: normalize
-  })
-```
-
-Or even simpler in basic case with standard `makeAsyncDriver` options:
+Simple case with standard `makeAsyncDriver` options:
 ```js
 export const makeReadFileDriver = (options) => 
   makeAsyncDriver((request, callback) => {
@@ -193,8 +168,8 @@ Useful for easier filtering `responses$` by `request` properties, you can filter
 * by provider property  (first parameter to `select`, second is match)
 * by multiple properties providing object {....}
 
-If `match` param **can be `RegExp`** then `match.test` function will be used for testing,
-or it can be a **testing `function`** itself,  otherwise `request` property will be checked 
+If `match` param **can be RegExp** then `match.test` function will be used for testing,
+or it can be a **testing function** itself,  otherwise `request` property will be checked 
 for **strict equality** with `match` param.
 
 ## Flattening helpers (`successful`, `failed`)
@@ -276,7 +251,6 @@ run(main, {
   HTTP: httpDriver
 })
 ```
-
 
 ##Install 
 `npm install cycle-async-driver -S`

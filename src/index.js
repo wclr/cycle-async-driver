@@ -7,7 +7,10 @@ export const isObservable = (response$) =>
 export const isPromise = (response$) =>
   typeof response$.then === 'function'
 
-export {proxyAndKeepMethods}
+const defaultRequestProp = 'request'
+const defaultSelectorMethod = 'select'
+const defaultSelectorProp = 'category'
+const defaultFlattenHelpers = ['successful', 'failed']
 
 const flattenSuccessful = (r$, selector, requestProp) =>
   (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
@@ -22,7 +25,7 @@ const makeFlattenHelper = (flattenFn) => {
       let r$$ = args.shift()
       return fn.apply(null, args)(r$$)
     }
-    let [selector, requestProp = 'request'] = args
+    let [selector, requestProp = defaultRequestProp] = args
     return function (r$$) {
       return r$$.flatMap(r$ => flattenFn(r$, selector, requestProp))
     }
@@ -33,8 +36,8 @@ export const successful = makeFlattenHelper(flattenSuccessful)
 export const failed = makeFlattenHelper(flattenFailed)
 
 const makeSelectHelper = ({
-  selectorProp = 'category',
-  requestProp = 'request'
+  selectorProp = defaultSelectorProp,
+  requestProp = defaultRequestProp
 } = {}) => {
   return function (property, match) {
     if (arguments.length === 1){
@@ -77,7 +80,7 @@ export const select = (...args) => {
   }
 }
 
-export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'failed'], requestProp) => {
+export const attachFlattenHelpers = (r$$, flattenHelpers = defaultFlattenHelpers, requestProp) => {
   r$$[flattenHelpers[0]] = function(selector) {
     return successful(this, selector, requestProp)
   }
@@ -89,8 +92,8 @@ export const attachFlattenHelpers = (r$$, flattenHelpers = ['successful', 'faile
 
 export const attachSelectorHelper = 
   (r$$, {
-    selectorMethod = 'select',
-    selectorProp,
+    selectorMethod = defaultSelectorMethod,
+    selectorProp = defaultSelectorProp,
     requestProp
   } = {}) => {
     r$$[selectorMethod] = makeSelectHelper({selectorProp, requestProp})
@@ -103,20 +106,37 @@ export const attachHelpers = (r$$, options = {}) => {
       return attachHelpers(r$$.apply(r$$, arguments), options)
     } 
   }
-  let {flatten = true, selector = true, keepMethods = true} = options 
-  flatten && attachFlattenHelpers(r$$)
-  selector && attachSelectorHelper(r$$)
+  let {
+    flatten = true,
+    selector = true,
+    keepMethods = true,
+    requestProp = defaultRequestProp} = options
+
+  if (flatten){
+    if (!Array.isArray(flatten)){
+      flatten = defaultFlattenHelpers
+    }
+    attachFlattenHelpers(r$$, flatten, requestProp)
+  }
+  if (selector){
+    attachSelectorHelper(r$$, {
+      ...selector,
+      requestProp
+    })
+  }
+
   if (keepMethods){
-    return proxyAndKeepMethods(r$$, [
+    let methodsToKeep = [
       'isolateSink',
-      'isolateSource',
-      'select',
-      'successful',
-      'failed'
-    ])
+      'isolateSource'
+    ].concat(selector ? (selector.selectorMethod || defaultSelectorMethod) : [])
+      .concat(flatten || [])
+    return proxyAndKeepMethods(r$$, methodsToKeep)
   }
   return r$$
 }
+
+export {proxyAndKeepMethods}
 
 const createResponse$FromGetResponse = (getResponse, reqOptions) => {
   let p
@@ -140,7 +160,7 @@ export const makeAsyncDriver = (options) => {
   let {
     createResponse$,
     getResponse,
-    requestProp = 'request',
+    requestProp = defaultRequestProp,
     responseProp = false,
     normalizeRequest = _ => _,
     eager = true,
@@ -149,9 +169,9 @@ export const makeAsyncDriver = (options) => {
     isolateMap = null,
     isolateSink,
     isolateSource,
-    selectorMethod = 'select',
-    selectorProp = 'category',
-    flattenHelpers = ['successful', 'failed']
+    selectorMethod = defaultSelectorMethod,
+    selectorProp = defaultSelectorProp,
+    flattenHelpers = defaultFlattenHelpers
   } = options
 
   if (responseProp === true){
