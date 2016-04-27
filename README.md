@@ -184,7 +184,7 @@ const main = ({asyncDriver}) => {
         .failure((e, request) => `failure for mark ${request.mark}`) // you can provider mapping function into helper
     
     // get only `second` `class` success responses
-    const secondSuccessul$ = async
+    const secondSuccessul$ = asyncDriver
     .select({'class': 'second'})
     .filter(r$ => r$.request.mark[0] === 'T' )
     .success((response, request) => {...}) // notice that you can use helpers after filtering
