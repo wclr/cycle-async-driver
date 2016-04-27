@@ -237,7 +237,7 @@ const httpDriver = makeHTTPDriver({eager: true})
 // you can use custom helpers name
 httpDriver = attachHelpers(httpDriver, {
   flatten: ['successful', 'failed'],
-  seletorMethod: 'onlyIf' // if `false` will not attach 
+  selectorMethod: 'onlyIf' // if `false` will not attach 
 }) 
 
 ...
