@@ -1,5 +1,5 @@
 import {run} from '@cycle/core'
-import {makeAsyncDriver, successful, failed, select} from '../lib/index'
+import {makeAsyncDriver, attachHelpers, success, failure, select} from '../lib/index'
 import {Observable as O} from 'rx'
 import isolate from '@cycle/isolate'
 import test from 'tape'
@@ -42,7 +42,9 @@ var driverWithFailure = makeAsyncDriver({
 var asyncDriver = makeAsyncDriver({
   createResponse$: (request) =>
     O.create(observer => {
-      setTimeout(() => observer.onNext({asyncName: 'async ' + request.name}), 10)
+      setTimeout(() => request.name
+        ? observer.onNext({asyncName: 'async ' + request.name})
+        : observer.onError('async error'), 10)
     }),
   requestProp: 'query',
   normalizeRequest: (name) =>
@@ -167,10 +169,10 @@ test('Two isolated requests', (t) => {
   })
 })
 
-test('successful and failed helpers', (t) => {
+test('success and failure helpers', (t) => {
   let mergedCount = 0
-  let successfulCount = 0
-  let failedCount = 0
+  let successCount = 0
+  let failureCount = 0
   const main = ({async}) => {
     return {
       async: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
@@ -178,10 +180,10 @@ test('successful and failed helpers', (t) => {
       success: async
         .filter(r$ => r$.request.name)
         .filter(r$ => r$.request.name !== 'Alex')
-        .successful(({response, request}) =>
+        .success(({response, request}) =>
         ({response: response + ' mapped', request})
       ),
-      fail: async.failed(({error, request}) =>
+      fail: async.failure(({error, request}) =>
         ({error: error + ' mapped', request})
       )
     }
@@ -196,13 +198,13 @@ test('successful and failed helpers', (t) => {
     },
     success: (response$) => {
       response$.subscribe(r => {
-        successfulCount++
-        t.is(r.response, `async ${r.request.name} mapped`, 'successful response mapped')
+        successCount++
+        t.is(r.response, `async ${r.request.name} mapped`, 'success response mapped')
       })
     },
     fail: (error$) => {
       error$.subscribe(r => {
-        failedCount++
+        failureCount++
         t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
         t.is(r.request.name, '', 'error contains request')
       })
@@ -210,16 +212,16 @@ test('successful and failed helpers', (t) => {
   })
   setTimeout(() => {
     t.is(mergedCount, 2, 'merged count correct')
-    t.is(successfulCount, 4, 'successful count correct')
-    t.is(failedCount, 2, 'failed count correct')
+    t.is(successCount, 4, 'success count correct')
+    t.is(failureCount, 2, 'failure count correct')
     t.end()
   }, 500)
 })
 
-test('detached successful and failed helpers', (t) => {
+test('detached success and failure helpers', (t) => {
   let mergedCount = 0
-  let successfulCount = 0
-  let failedCount = 0
+  let successCount = 0
+  let failureCount = 0
   const main = ({async}) => {
     return {
       async: O.from([
@@ -237,11 +239,11 @@ test('detached successful and failed helpers', (t) => {
         .filter(r$ => r$.request.name)
         .let(select({name: (_) => !/Alex/.test(_)}))
         .let(
-          successful(({response, request}) =>
+          success(({response, request}) =>
             ({response: response + ' mapped', request})
           )
         ),
-      fail: select(async, {maker: true}).let(failed).map(({error, request}) =>
+      fail: select(async, {maker: true}).let(failure).map(({error, request}) =>
         ({error: error + ' mapped', request})
       )
     }
@@ -256,14 +258,14 @@ test('detached successful and failed helpers', (t) => {
     },
     success: (response$) => {
       response$.subscribe(r => {
-        successfulCount++
+        successCount++
         //console.log('success', r)
-        t.is(r.response, `async ${r.request.name} mapped`, 'successful response mapped')
+        t.is(r.response, `async ${r.request.name} mapped`, 'success response mapped')
       })
     },
     fail: (error$) => {
       error$.subscribe(r => {
-        failedCount++
+        failureCount++
         t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
         t.is(r.request.name, '', 'error contains request')
       })
@@ -271,8 +273,8 @@ test('detached successful and failed helpers', (t) => {
   })
   setTimeout(() => {
     t.is(mergedCount, 2, 'merged count correct')
-    t.is(successfulCount, 4, 'successful count correct')
-    t.is(failedCount, 2, 'failed count correct')
+    t.is(successCount, 4, 'success count correct')
+    t.is(failureCount, 2, 'failure count correct')
     t.end()
   }, 500)
 })
@@ -320,3 +322,56 @@ test('select helper', (t) => {
   }, 100)
 })
 
+test('attachHelpers: custom helpers attached', (t) => {
+  asyncDriver = attachHelpers(asyncDriver, {
+    flatten: ['successful', 'failed'],
+    selectorMethod: 'onlyIf',
+    requestProp: 'query'
+  })
+
+  let mergedCount = 0
+  let successCount = 0
+  let failureCount = 0
+  const main = ({async}) => {
+    return {
+      async: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
+      merged: async.mergeAll().catch(O.empty()),
+      success: async
+        .onlyIf({name: _ => _ !== 'ALEX'})
+        .successful((response, query) =>
+          ({response: response.asyncName + ' mapped', query})
+        ),
+      fail: async.failed((error, query) =>
+          ({error: error + ' mapped', query})
+      )
+    }
+  }
+  run(main, {
+    async: asyncDriver,
+    merged: (response$) => {
+      var count = 0
+      response$.subscribe(r => {
+        mergedCount++
+      })
+    },
+    success: (response$) => {
+      response$.subscribe(r => {
+        successCount++
+        t.is(r.response, `async ${r.query.name} mapped`, 'success response mapped')
+      })
+    },
+    fail: (error$) => {
+      error$.subscribe(r => {
+        failureCount++
+        t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
+        t.is(r.query.name, '', 'error contains request')
+      })
+    }
+  })
+  setTimeout(() => {
+    t.is(mergedCount, 2, 'merged count correct')
+    t.is(successCount, 4, 'success count correct')
+    t.is(failureCount, 2, 'failure count correct')
+    t.end()
+  }, 500)
+})

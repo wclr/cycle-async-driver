@@ -1,6 +1,6 @@
 ### v1.2.0     
-    * Added flatten helpers `successful` and `failed`
-    * Added default selector helper `select` with `category` prop
+    * Added flatten helpers `success` and `failure`
+    * Added default selector helper `select` with default `category` prop
     * Exports `attachHelpers` and other helper methods for extenal use
 
 ### v1.1.2

@@ -10,13 +10,13 @@ export const isPromise = (response$) =>
 const defaultRequestProp = 'request'
 const defaultSelectorMethod = 'select'
 const defaultSelectorProp = 'category'
-const defaultFlattenHelpers = ['successful', 'failed']
+const defaultFlattenHelpers = ['success', 'failure']
 
-const flattenSuccessful = (r$, selector, requestProp) =>
+const flattenSuccess = (r$, selector, requestProp) =>
   (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
     .catch(O.empty())
 
-const flattenFailed = (r$, selector, requestProp) =>
+const flattenFailure = (r$, selector, requestProp) =>
   r$.skip().catch(e => O.of(selector ? selector(e, r$[requestProp]) : e))
 
 const makeFlattenHelper = (flattenFn) => {
@@ -32,8 +32,8 @@ const makeFlattenHelper = (flattenFn) => {
   }
 }
 
-export const successful = makeFlattenHelper(flattenSuccessful)
-export const failed = makeFlattenHelper(flattenFailed)
+export const success = makeFlattenHelper(flattenSuccess)
+export const failure = makeFlattenHelper(flattenFailure)
 
 const makeSelectHelper = ({
   selectorProp = defaultSelectorProp,
@@ -82,10 +82,10 @@ export const select = (...args) => {
 
 export const attachFlattenHelpers = (r$$, flattenHelpers = defaultFlattenHelpers, requestProp) => {
   r$$[flattenHelpers[0]] = function(selector) {
-    return successful(this, selector, requestProp)
+    return success(this, selector, requestProp)
   }
-  r$$[flattenHelpers[1]] = function (selector, requestProp) {
-    return failed(this, selector)
+  r$$[flattenHelpers[1]] = function (selector) {
+    return failure(this, selector, requestProp)
   }
   return r$$
 }
@@ -108,19 +108,20 @@ export const attachHelpers = (r$$, options = {}) => {
   }
   let {
     flatten = true,
-    selector = true,
+    selectorMethod = defaultSelectorMethod,
+    selectorProp = defaultSelectorProp,
     keepMethods = true,
     requestProp = defaultRequestProp} = options
-
   if (flatten){
     if (!Array.isArray(flatten)){
       flatten = defaultFlattenHelpers
     }
     attachFlattenHelpers(r$$, flatten, requestProp)
   }
-  if (selector){
+  if (selectorMethod){
     attachSelectorHelper(r$$, {
-      ...selector,
+      selectorMethod,
+      selectorProp,
       requestProp
     })
   }
@@ -129,7 +130,7 @@ export const attachHelpers = (r$$, options = {}) => {
     let methodsToKeep = [
       'isolateSink',
       'isolateSource'
-    ].concat(selector ? (selector.selectorMethod || defaultSelectorMethod) : [])
+    ].concat(selectorMethod || [])
       .concat(flatten || [])
     return proxyAndKeepMethods(r$$, methodsToKeep)
   }

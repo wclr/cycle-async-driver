@@ -160,7 +160,7 @@ then default name value `response` is used.
 * **isolateSource** - use custom `isolateSource` method
 * **selectorMethod** (default: `select`) - custom name of selector method, if `false` helper is not attached
 * **selectorProp** (default: `category`) - custom name of selector property, if`false` helper is not attached
-* **flattenHelpers** (default: ['successful', 'failed']) - custom names for flattening helpers, if`false` helpers are not attached
+* **flattenHelpers** (default: ['success', 'failure']) - custom names for flattening helpers, if`false` helpers are not attached
 
 ## Filtering helper (`select`) 
 Useful for easier filtering `responses$` by `request` properties, you can filter request object either: 
@@ -172,18 +172,18 @@ If `match` param **can be RegExp** then `match.test` function will be used for t
 or it can be a **testing function** itself,  otherwise `request` property will be checked 
 for **strict equality** with `match` param.
 
-## Flattening helpers (`successful`, `failed`)
+## Flattening helpers (`success`, `failure`)
 Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
 So may not bother of *catching* errors and get uninterrupted stream of *successes* or *errors*.  
 
 ```js
 const main = ({asyncDriver}) => {
-    // get only `first` `class` failed responses
+    // get only `first` `class` failure responses
     const firstFailed$ = asyncDriver        
         .select('class', 'first') // if two params passed, first is treated as selector prop name
-        .failed((e, request) => `failed for mark ${request.mark}`) // you can provider mapping function into helper
+        .failure((e, request) => `failure for mark ${request.mark}`) // you can provider mapping function into helper
     
-    // get only `second` `class` successful responses
+    // get only `second` `class` success responses
     const secondSuccessul$ = async
     .select({'class': 'second'})
     .filter(r$ => r$.request.mark[0] === 'T' )
@@ -204,26 +204,26 @@ const main = ({asyncDriver}) => {
 You can use it for example with official `HTTP` driver, like detached helper functions:  
 
 ```js
-import {succesful, failed, select} from 'cycle-async-driver'
+import {success, failure, select} from 'cycle-async-driver'
 ...
 
-let allSuccessful$ = succesful(select(HTTP, 'url', '/api/users'))
-let filteredFailed$ = failed(HTTP.filter(...))
+let allSuccessful$ = success(select(HTTP, 'url', '/api/users'))
+let filteredFailed$ = failure(HTTP.filter(...))
 
 // or
 
 let allSuccessful$ = HTTP
     .let(select({method: 'POST', url: /users/}))
-    .let(succesful)
+    .let(success)
 
-let filteredFailed$ = HTTP.filter(...).let(failed)
+let filteredFailed$ = HTTP.filter(...).let(failure)
 
 // or
-let allSuccessful$ = HTTP.let(succesful(respose => ...))
+let allSuccessful$ = HTTP.let(success(respose => ...))
 
 let filteredFailed$ = HTTP.filter(...)
   .let(select({method: 'POST', url: /users/}))
-  .let(failed((error, request) => ...))
+  .let(failure((error, request) => ...))
 
 ```
 
@@ -234,14 +234,18 @@ import {attachHelpers} from 'cycle-async-driver'
 ...
 
 const httpDriver = makeHTTPDriver({eager: true}) 
-attachHelpers(httpDriver) 
+// you can use custom helpers name
+httpDriver = attachHelpers(httpDriver, {
+  flatten: ['successful', 'failed'],
+  seletorMethod: 'onlyIf' // if `false` will not attach 
+}) 
 
 ...
 
 const main = ({DOM, HTTP}) => {
   let usersPostSuccessful$ = HTTP
-    .select({url: /users/, method: 'POST'}) // you can use object to match more then one property in request
-    .succesful()
+    .onlyIf({url: /users/, method: 'POST'}) // you can use object to match more then one property in request
+    .successful()
   let filteredFailed$ = HTTP.filter(...).failed()
   ...
 } 
