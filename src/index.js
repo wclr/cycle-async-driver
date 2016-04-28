@@ -21,7 +21,7 @@ const flattenFailure = (r$, selector, requestProp) =>
 
 const makeFlattenHelper = (flattenFn) => {
   return function fn (...args) {
-    if (args[0] && isObservable(args[0])){
+    if (args[0] && isObservable(args[0])) {
       let r$$ = args.shift()
       return fn.apply(null, args)(r$$)
     }
@@ -40,12 +40,12 @@ const makeSelectHelper = ({
   requestProp = defaultRequestProp
 } = {}) => {
   return function (property, match) {
-    if (arguments.length === 1){
+    if (arguments.length === 1) {
       match = property
       property = selectorProp
     }
     if (!match){
-      throw new Error (`Selector helper should have \`match\` ` +
+      throw new Error(`Selector helper should have \`match\` ` +
         `param which is string, regExp, or plain object with props.`)
     }
     let makeTestSimple = (match) =>
