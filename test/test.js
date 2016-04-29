@@ -38,6 +38,21 @@ var driverWithFailure = makeAsyncDriver({
   responseProp: true
 })
 
+var driverWithPull = makeAsyncDriver({
+  usePullDriver: false,
+  normalizeRequest: (name) =>
+    typeof name === 'string' ? {name} : name,
+  getResponse: (request, cb) => {
+    return new Promise((resolve, reject) =>
+      request.name
+        ? resolve('async ' + request.name)
+        : reject('async error')
+    )
+  },
+  responseProp: true
+})
+
+
 
 var asyncDriver = makeAsyncDriver({
   createResponse$: (request) =>
@@ -332,22 +347,21 @@ test('attachHelpers: custom helpers attached', (t) => {
   let mergedCount = 0
   let successCount = 0
   let failureCount = 0
-  const main = ({async}) => {
+  const main = ({asyncDriver}) => {
     return {
-      async: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
-      merged: async.mergeAll().catch(O.empty()),
-      success: async
-        .onlyIf({name: _ => _ !== 'ALEX'})
+      asyncDriver: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
+      merged: asyncDriver.mergeAll().catch(O.empty()),
+      success: asyncDriver.onlyIf({name: _ => _ !== 'ALEX'})
         .successful((response, query) =>
           ({response: response.asyncName + ' mapped', query})
         ),
-      fail: async.failed((error, query) =>
+      fail: asyncDriver.failed((error, query) =>
           ({error: error + ' mapped', query})
       )
     }
   }
   run(main, {
-    async: asyncDriver,
+    asyncDriver: asyncDriver,
     merged: (response$) => {
       var count = 0
       response$.subscribe(r => {
@@ -374,4 +388,101 @@ test('attachHelpers: custom helpers attached', (t) => {
     t.is(failureCount, 2, 'failure count correct')
     t.end()
   }, 500)
+})
+
+
+test('Pull request', (t) => {
+  const main = ({async}) => {
+    return {
+      result: async.pull(O.just({name: 'John'})).mergeAll()
+    }
+  }
+  run(main, {
+    async: driverWithFailure,
+    result: (response$) => {
+      response$.subscribe(r => {
+        t.is(r.response, 'async John')
+        t.end()
+      })
+    }
+  })
+})
+
+test('Static pull request with sampler stream', (t) => {
+  const main = ({async}) => {
+    let sampler$ = O.interval(10)
+      //.do(x => console.log('tick'))
+    //let sampler$ = O.just(1000).do(x => console.log('tick'))
+    return {
+      result: async.pull({name: 'John'}, sampler$).mergeAll()
+    }
+  }
+  const {sources, sinks} = run(main, {
+    async: driverWithFailure,
+    result: (response$) => {
+      response$.subscribe(r => {
+        sinks.dispose()
+        sources.dispose()
+        t.is(r.response, 'async John')
+        t.end()
+      })
+      return {}
+    }
+  })
+})
+
+test('Pull request (no pull driver)', (t) => {
+  let count = 0
+  let pullCount = 0
+
+  const main = ({async}) => {
+    return {
+      async: O.just({name: 'Mary'}).delay(10),
+      result: async.mergeAll(),
+      pullResult: async.pull(O.just({name: 'John'})).mergeAll()
+    }
+  }
+  run(main, {
+    async: driverWithPull,
+    result: (response$) => {
+      response$.subscribe(r => {
+        //console.log('response,', r)
+        count++
+        t.is(r.response, 'async Mary')
+      })
+    },
+    pullResult: (response$) => {
+      response$.subscribe(r => {
+        //console.log('pull response,', r)
+        pullCount++
+        t.is(r.response, 'async John')
+      })
+    }
+  })
+  setTimeout(() => {
+    t.is(count, 1, 'count of responses ok')
+    t.is(pullCount, 1, 'count of pull responses ok')
+    t.end()
+  }, 100)
+})
+
+test('Static pull request w/o sampler', (t) => {
+  const main = ({async}) => {
+    return {
+      result: async.pull({name: 'John'})
+        .mergeAll()
+    }
+  }
+  run(main, {
+    async: driverWithFailure,
+    result: (response$) => {
+      response$.subscribe(r => {
+        t.is(r.response, 'async John')
+
+        setTimeout(() => {
+          t.end()
+        }, 5000)
+      })
+    }
+  })
 })

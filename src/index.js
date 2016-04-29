@@ -1,16 +1,13 @@
-import {Observable as O} from 'rx'
-import {proxyAndKeepMethods} from './proxy-methods'
+import {Observable as O, Subject} from 'rx'
+import {proxyAndKeepMethods} from './proxyMethods'
 
-export const isObservable = (response$) =>
-  typeof response$.subscribe === 'function'
-
-export const isPromise = (response$) =>
-  typeof response$.then === 'function'
+import {isObservable, isPromise} from './util'
 
 const defaultRequestProp = 'request'
 const defaultSelectorMethod = 'select'
 const defaultSelectorProp = 'category'
 const defaultFlattenHelpers = ['success', 'failure']
+const defaultPullHelperName = 'pull'
 
 const flattenSuccess = (r$, selector, requestProp) =>
   (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
@@ -100,38 +97,51 @@ export const attachSelectorHelper =
     return r$$
   }
 
+import {attachPull} from './attachPull'
+import {attachPullDriver} from './attachPullDriver'
+
 export const attachHelpers = (r$$, options = {}) => {
+  let {
+    pullHelper = defaultPullHelperName,
+    usePullDriver = true,
+    pullScopePrefix,
+    forceAttaching = false
+    } = options
+
   if (typeof r$$ === 'function'){
     return function () {
+      if (pullHelper){
+        let attachPullFn = usePullDriver ? attachPullDriver : attachPull
+        r$$ = attachPullFn(r$$, pullHelper, pullScopePrefix)
+      }
       return attachHelpers(r$$.apply(r$$, arguments), options)
     } 
   }
   let {
-    flatten = true,
+    flatten = defaultFlattenHelpers,
     selectorMethod = defaultSelectorMethod,
     selectorProp = defaultSelectorProp,
-    keepMethods = true,
+    keepMethods = [],
     requestProp = defaultRequestProp} = options
+
   if (flatten){
-    if (!Array.isArray(flatten)){
-      flatten = defaultFlattenHelpers
-    }
     attachFlattenHelpers(r$$, flatten, requestProp)
   }
-  if (selectorMethod){
+  if (selectorMethod && selectorProp && requestProp){
     attachSelectorHelper(r$$, {
       selectorMethod,
       selectorProp,
       requestProp
     })
   }
-
   if (keepMethods){
     let methodsToKeep = [
       'isolateSink',
       'isolateSource'
     ].concat(selectorMethod || [])
       .concat(flatten || [])
+      .concat(pullHelper || [])
+      .concat(keepMethods)
     return proxyAndKeepMethods(r$$, methodsToKeep)
   }
   return r$$
@@ -170,9 +180,13 @@ export const makeAsyncDriver = (options) => {
     isolateMap = null,
     isolateSink,
     isolateSource,
-    selectorMethod = defaultSelectorMethod,
-    selectorProp = defaultSelectorProp,
-    flattenHelpers = defaultFlattenHelpers
+    //selectorMethod = defaultSelectorMethod,
+    //selectorProp = defaultSelectorProp,
+    //flattenHelpers = defaultFlattenHelpers,
+    //pullHelper = defaultPullHelperName,
+    //pullScopePrefix,
+    //usePullDriver = true,
+    //keepMethods = []
   } = options
 
   if (responseProp === true){
@@ -210,7 +224,7 @@ export const makeAsyncDriver = (options) => {
     return isolatedResponse$$
   }
 
-  return function driver (request$) {
+  let driver = (request$) => {
     let response$$ = request$
       .map(request => {
         const reqOptions = normalizeRequest(request)
@@ -248,7 +262,7 @@ export const makeAsyncDriver = (options) => {
       .replay(null, 1)
     response$$.connect()
 
-    var methodsToKeep = []
+    var methodsToKeep = ['dispose']
 
     if (isolate){
       response$$.isolateSource = isolateSource || _isolateSource
@@ -256,20 +270,10 @@ export const makeAsyncDriver = (options) => {
       methodsToKeep.push('isolateSink', 'isolateSource')
     }
 
-    if (Array.isArray(flattenHelpers)){
-      attachFlattenHelpers(response$$, flattenHelpers, requestProp)
-      methodsToKeep.push(flattenHelpers[0], flattenHelpers[1])
-    }
-    
-    if (selectorMethod && selectorProp && requestProp){
-      attachSelectorHelper(response$$, {selectorMethod, requestProp, selectorProp})
-      methodsToKeep.push(selectorMethod)
-    }
-    
-    return methodsToKeep.length
-      ? proxyAndKeepMethods(response$$, methodsToKeep)
-      : response$$
+    return response$$
   }
+
+  return attachHelpers(driver, options)
 }
 
 export {makeAsyncDriver as createDriver}

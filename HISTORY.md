@@ -1,3 +1,6 @@
+### v1.3.0     
+    * Added pull helper (two options: using new driver or using isolate mechanics)
+
 ### v1.2.0     
     * Added flatten helpers `success` and `failure`
     * Added default selector helper `select` with default `category` prop

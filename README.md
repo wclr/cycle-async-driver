@@ -172,6 +172,8 @@ If `match` param **can be RegExp** then `match.test` function will be used for t
 or it can be a **testing function** itself,  otherwise `request` property will be checked 
 for **strict equality** with `match` param.
 
+Technically this helper just applies advanced `filter` on `request` property of `response$$` stream.
+
 ## Flattening helpers (`success`, `failure`)
 Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
 So may not bother of *catching* errors and get uninterrupted stream of *successes* or *errors*.  
@@ -198,6 +200,20 @@ const main = ({asyncDriver}) => {
       ]),       
     }
   }
+```
+
+Technically `success` helper just *catches* errors on the `response$` stream 
+and turns them into `empty` stream, so consumer just don't see them, 
+and `failure` helper does vice versa.
+
+## Pull helper (`pull`)
+**Experimental.* Allow to initialize pulling from driver.  
+```js
+    db.pull({find: {...}}, interval(1000))
+```
+
+```js   
+  HTTP.pull('/api/tasks', interval(5000)).success(...)
 ```
 
 ## External use of helpers (with other async drivers)
