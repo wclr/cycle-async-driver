@@ -100,23 +100,26 @@ export const attachSelectorHelper =
 import {attachPull} from './attachPull'
 import {attachPullDriver} from './attachPullDriver'
 
-export const attachHelpers = (r$$, options = {}) => {
+export const attachHelpers = (driver, options = {}) => {
   let {
     pullHelper = defaultPullHelperName,
     usePullDriver = true,
-    pullScopePrefix,
-    forceAttaching = false
+    pullScopePrefix
     } = options
 
-  if (typeof r$$ === 'function'){
+  if (typeof driver === 'function'){
     return function () {
-      if (pullHelper){
-        let attachPullFn = usePullDriver ? attachPullDriver : attachPull
-        r$$ = attachPullFn(r$$, pullHelper, pullScopePrefix)
+      let driverWithHelpers = function () {
+        return attachHelpers(driver.apply(null, arguments), options)
       }
-      return attachHelpers(r$$.apply(r$$, arguments), options)
-    } 
+      if (pullHelper){
+        const attachPullFn = usePullDriver ? attachPullDriver : attachPull
+        driverWithHelpers = attachPullFn(driverWithHelpers, pullHelper, pullScopePrefix)
+      }
+      return driverWithHelpers.apply(null, arguments)
+    }
   }
+  const response$$ = driver
   let {
     flatten = defaultFlattenHelpers,
     selectorMethod = defaultSelectorMethod,
@@ -125,10 +128,10 @@ export const attachHelpers = (r$$, options = {}) => {
     requestProp = defaultRequestProp} = options
 
   if (flatten){
-    attachFlattenHelpers(r$$, flatten, requestProp)
+    attachFlattenHelpers(response$$, flatten, requestProp)
   }
   if (selectorMethod && selectorProp && requestProp){
-    attachSelectorHelper(r$$, {
+    attachSelectorHelper(response$$, {
       selectorMethod,
       selectorProp,
       requestProp
@@ -142,9 +145,9 @@ export const attachHelpers = (r$$, options = {}) => {
       .concat(flatten || [])
       .concat(pullHelper || [])
       .concat(keepMethods)
-    return proxyAndKeepMethods(r$$, methodsToKeep)
+    return proxyAndKeepMethods(response$$, methodsToKeep)
   }
-  return r$$
+  return response$$
 }
 
 export {proxyAndKeepMethods}
@@ -180,13 +183,6 @@ export const makeAsyncDriver = (options) => {
     isolateMap = null,
     isolateSink,
     isolateSource,
-    //selectorMethod = defaultSelectorMethod,
-    //selectorProp = defaultSelectorProp,
-    //flattenHelpers = defaultFlattenHelpers,
-    //pullHelper = defaultPullHelperName,
-    //pullScopePrefix,
-    //usePullDriver = true,
-    //keepMethods = []
   } = options
 
   if (responseProp === true){

@@ -436,10 +436,12 @@ test('Pull request (no pull driver)', (t) => {
   let pullCount = 0
 
   const main = ({async}) => {
+    var pull$ = async.pull(O.just({name: 'John'}))
+    t.is(typeof pull$.success, 'function', 'pull stream should have `success` method')
     return {
       async: O.just({name: 'Mary'}).delay(10),
       result: async.mergeAll(),
-      pullResult: async.pull(O.just({name: 'John'})).mergeAll()
+      pullResult: pull$.success()
     }
   }
   run(main, {
@@ -460,8 +462,8 @@ test('Pull request (no pull driver)', (t) => {
     }
   })
   setTimeout(() => {
-    t.is(count, 1, 'count of responses ok')
-    t.is(pullCount, 1, 'count of pull responses ok')
+    t.is(count, 1, 'count of standard responses should be correct')
+    t.is(pullCount, 1, 'count of pull responses should be correct')
     t.end()
   }, 100)
 })
