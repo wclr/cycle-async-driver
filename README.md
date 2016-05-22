@@ -160,7 +160,8 @@ then default name value `response` is used.
 * **isolateSource** - use custom `isolateSource` method
 * **selectorMethod** (default: `select`) - custom name of selector method, if `false` helper is not attached
 * **selectorProp** (default: `category`) - custom name of selector property, if`false` helper is not attached
-* **flattenHelpers** (default: ['success', 'failure']) - custom names for flattening helpers, if`false` helpers are not attached
+* **flatten** (default: ['success', 'failure']) - custom names for flattening (merge latest) helpers, if`false` helpers are not attached
+* **flattenAll** (default: ['successAll', 'failureAll']) - custom names for flattening (merge all) helpers, if`false` helpers are not attached
 
 ## Filtering helper (`select`) 
 Useful for easier filtering `responses$` by `request` properties, you can filter request object either: 
@@ -275,7 +276,7 @@ run(main, {
 })
 ```
 
-##Install 
+## Install 
 `npm install cycle-async-driver -S`
 
 ## Tests

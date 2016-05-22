@@ -10,6 +10,7 @@
     "build-watch": "babel -w src -d lib",
     "test": "node -r babel-register test/test.js",
     "test-watch": "node-dev --respawn -r babel-register test/test.js",
+    "vmd": "vmd README.md",
     "prepublish": "npm run clean && npm run build"
   },
   "author": "whitecolor",
