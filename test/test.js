@@ -1,5 +1,5 @@
 import {run} from '@cycle/core'
-import {makeAsyncDriver, attachHelpers, success, failure, select} from '../lib/index'
+import {makeAsyncDriver, attachHelpers, success, failure, successAll, failureAll, select} from '../lib/index'
 import {Observable as O} from 'rx'
 import isolate from '@cycle/isolate'
 import test from 'tape'
@@ -254,11 +254,11 @@ test('detached success and failure helpers', (t) => {
         .filter(r$ => r$.request.name)
         .let(select({name: (_) => !/Alex/.test(_)}))
         .let(
-          success(({response, request}) =>
+          successAll(({response, request}) =>
             ({response: response + ' mapped', request})
           )
         ),
-      fail: select(async, {maker: true}).let(failure).map(({error, request}) =>
+      fail: select(async, {maker: true}).let(failureAll).map(({error, request}) =>
         ({error: error + ' mapped', request})
       )
     }
@@ -339,7 +339,7 @@ test('select helper', (t) => {
 
 test('attachHelpers: custom helpers attached', (t) => {
   asyncDriver = attachHelpers(asyncDriver, {
-    flatten: ['successful', 'failed'],
+    flattenAll: ['successful', 'failed'],
     selectorMethod: 'onlyIf',
     requestProp: 'query'
   })

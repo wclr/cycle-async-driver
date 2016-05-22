@@ -174,7 +174,7 @@ for **strict equality** with `match` param.
 
 Technically this helper just applies advanced `filter` on `request` property of `response$$` stream.
 
-## Flattening helpers (`success`, `failure`)
+## Flattening helpers (`success`, `failure`, `successAll`, `failureAll`)
 Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
 So may not bother of *catching* errors and get uninterrupted stream of *successes* or *errors*.  
 
@@ -205,6 +205,9 @@ const main = ({asyncDriver}) => {
 Technically `success` helper just *catches* errors on the `response$` stream 
 and turns them into `empty` stream, so consumer just don't see them, 
 and `failure` helper does vice versa.
+
+`success` and `failure` get only latest response, `successAll` and `failureAll` 
+merge all responses results.
 
 ## Pull helper (`pull`)
 **Experimental.* Allow to initialize pulling from driver.  

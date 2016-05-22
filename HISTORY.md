@@ -1,3 +1,6 @@
+### v1.4.0     
+    * Added successAll and failureAll helpers
+
 ### v1.3.0     
     * Added pull helper (two options: using new driver or using isolate mechanics)
 

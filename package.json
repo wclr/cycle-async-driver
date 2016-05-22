@@ -1,6 +1,6 @@
 {
   "name": "cycle-async-driver",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Helper for creating async request/response cycle.js drivers",
   "keywords": ["cyclejs", "driver", "async"],
   "main": "lib/index.js",
@@ -9,7 +9,7 @@
     "build": "npm run clean && babel src -d lib",
     "build-watch": "babel -w src -d lib",
     "test": "node -r babel-register test/test.js",
-    "test-dev": "node-dev --respawn -r babel-register test/test.js",
+    "test-watch": "node-dev --respawn -r babel-register test/test.js",
     "prepublish": "npm run clean && npm run build"
   },
   "author": "whitecolor",
