@@ -1,158 +1,18 @@
 import {Observable as O, Subject} from 'rx'
-import {proxyAndKeepMethods} from './proxyMethods'
+import {isPromise} from './util'
+import defaults from './defaults'
 
-import {isObservable, isPromise} from './util'
+import {saFilter, saFlatten, saFlattenAll} from './adapterHelpers'
+import {
+  attachIsolateHelpers,
+  attachSelectHelper,
+  attachFlattenHelpers
+} from './helpers'
 
-const defaultRequestProp = 'request'
-const defaultSelectorMethod = 'select'
-const defaultSelectorProp = 'category'
-const defaultFlattenHelpers = ['success', 'failure']
-const defaultPullHelperName = 'pull'
 
-const flattenSuccess = (r$, selector, requestProp) =>
-  (selector ? r$.map((r) => selector(r, r$[requestProp])) : r$)
-    .catch(O.empty())
+const isFunction = (f) => typeof f === 'function'
 
-const flattenFailure = (r$, selector, requestProp) =>
-  r$.skip().catch(e => O.of(selector ? selector(e, r$[requestProp]) : e))
-
-const makeFlattenHelper = (flattenFn) => {
-  return function fn (...args) {
-    if (args[0] && isObservable(args[0])) {
-      let r$$ = args.shift()
-      return fn.apply(null, args)(r$$)
-    }
-    let [selector, requestProp = defaultRequestProp] = args
-    return function (r$$) {
-      return r$$.flatMap(r$ => flattenFn(r$, selector, requestProp))
-    }
-  }
-}
-
-export const success = makeFlattenHelper(flattenSuccess)
-export const failure = makeFlattenHelper(flattenFailure)
-
-const makeSelectHelper = ({
-  selectorProp = defaultSelectorProp,
-  requestProp = defaultRequestProp
-} = {}) => {
-  return function (property, match) {
-    if (arguments.length === 1) {
-      match = property
-      property = selectorProp
-    }
-    if (!match){
-      throw new Error(`Selector helper should have \`match\` ` +
-        `param which is string, regExp, or plain object with props.`)
-    }
-    let makeTestSimple = (match) =>
-      (match instanceof RegExp)
-        ? ::match.test
-        : typeof match === 'function'
-          ? match : (_) => match === _
-    if (match.constructor === Object){
-      let props = Object.keys(match)
-      return this.filter(
-        r$ => !props.reduce((matched, prop) =>
-          matched || !makeTestSimple(match[prop])(r$[requestProp][prop])
-          , false)
-      )
-    } else {
-      let testSimple = makeTestSimple(match)
-      return this.filter(
-        r$ => testSimple(r$[requestProp][property])
-      )
-    }
-  }
-}
-
-export const select = (...args) => {
-  if (args[0] && isObservable(args[0])){
-    let r$$ = args.shift()
-    return select.apply(null, args)(r$$)
-  }
-  var helper = makeSelectHelper()
-  return function (r$$) {
-    return helper.apply(r$$, args)
-  }
-}
-
-export const attachFlattenHelpers = (r$$, flattenHelpers = defaultFlattenHelpers, requestProp) => {
-  r$$[flattenHelpers[0]] = function(selector) {
-    return success(this, selector, requestProp)
-  }
-  r$$[flattenHelpers[1]] = function (selector) {
-    return failure(this, selector, requestProp)
-  }
-  return r$$
-}
-
-export const attachSelectorHelper = 
-  (r$$, {
-    selectorMethod = defaultSelectorMethod,
-    selectorProp = defaultSelectorProp,
-    requestProp
-  } = {}) => {
-    r$$[selectorMethod] = makeSelectHelper({selectorProp, requestProp})
-    return r$$
-  }
-
-import {attachPull} from './attachPull'
-import {attachPullDriver} from './attachPullDriver'
-
-export const attachHelpers = (driver, options = {}) => {
-  let {
-    pullHelper = defaultPullHelperName,
-    usePullDriver = true,
-    pullScopePrefix
-    } = options
-
-  if (typeof driver === 'function'){
-    return function () {
-      let driverWithHelpers = function () {
-        return attachHelpers(driver.apply(null, arguments), options)
-      }
-      if (pullHelper){
-        const attachPullFn = usePullDriver ? attachPullDriver : attachPull
-        driverWithHelpers = attachPullFn(driverWithHelpers, pullHelper, pullScopePrefix)
-      }
-      return driverWithHelpers.apply(null, arguments)
-    }
-  }
-  const response$$ = driver
-  let {
-    flatten = defaultFlattenHelpers,
-    selectorMethod = defaultSelectorMethod,
-    selectorProp = defaultSelectorProp,
-    keepMethods = [],
-    requestProp = defaultRequestProp} = options
-
-  if (flatten){
-    attachFlattenHelpers(response$$, flatten, requestProp)
-  }
-  if (selectorMethod && selectorProp && requestProp){
-    attachSelectorHelper(response$$, {
-      selectorMethod,
-      selectorProp,
-      requestProp
-    })
-  }
-  if (keepMethods){
-    let methodsToKeep = [
-      'isolateSink',
-      'isolateSource'
-    ].concat(selectorMethod || [])
-      .concat(flatten || [])
-      .concat(pullHelper || [])
-      .concat(keepMethods)
-    return proxyAndKeepMethods(response$$, methodsToKeep)
-  }
-  return response$$
-}
-
-export {proxyAndKeepMethods}
-
-const createResponse$FromGetResponse = (getResponse, reqOptions) => {
+const getResponsePromise = (getResponse, request) => {
   let p
   let promise = new Promise((resolve, reject) => {
     p = {resolve, reject}
@@ -160,117 +20,130 @@ const createResponse$FromGetResponse = (getResponse, reqOptions) => {
   let callback = (err, result) => {
     err ? p.reject(err) : p.resolve(result)
   }
-  let response$ = getResponse(reqOptions, callback)
-  if (!response$ || !isObservable(response$)){
-    if (response$ && isPromise(response$)) {
-      promise = response$
-    }
-    response$ = O.fromPromise(promise)
+  let res = getResponse(request, callback)
+  if (res && isPromise(res)) {
+    promise = res
   }
-  return response$
+  return promise
 }
 
 export const makeAsyncDriver = (options) => {
   let {
-    createResponse$,
     getResponse,
-    requestProp = defaultRequestProp,
+    getProgressiveResponse,
+    requestProp = 'request',
     responseProp = false,
     normalizeRequest = _ => _,
     eager = true,
     isolate = true,
     isolateProp = '_namespace',
-    isolateMap = null,
-    isolateSink,
-    isolateSource,
+    isolateNormalize = null,
+    selectHelper = 'select',
+    selectProp = 'category',
+    flattenHelpers = ['success', 'failure'],
+    flattenAllHelpers = ['successAll', 'failureAll'],
+    sourceIsStream = true
   } = options
 
   if (responseProp === true){
     responseProp = 'response'
   }
-  if (typeof normalizeRequest !== 'function'){
+  if (!isFunction(normalizeRequest)){
     throw new Error(`'normalize' option should be a function.`)
   }
-  if (normalizeRequest && !isolateMap){
-    isolateMap = normalizeRequest
+  if (normalizeRequest && !isolateNormalize){
+    isolateNormalize = normalizeRequest
   }
-
-  if (typeof options == 'function'){
+  if (isFunction(options)){
     getResponse = options
-  } else if (!createResponse$ && !getResponse) {
-    throw new Error(`'createResponse$' or 'getResponse' method should be provided.`)
+  }
+  if (!isFunction(getResponse)) {
+    throw new Error(`'getResponse' method is required.`)
   }
 
-  function _isolateSink(request$, scope) {
-    return request$.map(req => {
-      req = isolateMap(req)
-      req[isolateProp] = req[isolateProp] || []
-      req[isolateProp].push(scope)
-      return req
-    })
-  }
+  const driver = (request$, runSA) => {
+    const {observer, stream} = runSA.makeSubject()
+    const response$$ = runSA.remember(stream)
 
-  function _isolateSource(response$$, scope) {
-    let isolatedResponse$$ = response$$.filter(res$ =>
-      Array.isArray(res$[requestProp][isolateProp]) &&
-      res$[requestProp][isolateProp].indexOf(scope) !== -1
-    )
-    //isolatedResponse$$.isolateSource = _isolateSource
-    //isolatedResponse$$.isolateSink = _isolateSink
-    return isolatedResponse$$
-  }
-
-  let driver = (request$) => {
-    let response$$ = request$
-      .map(request => {
+    runSA.streamSubscribe(request$, {
+      next: (request => {
         const reqOptions = normalizeRequest(request)
         let response$
-        if (createResponse$){
-          response$ = createResponse$(reqOptions)
-        } else {
-          response$ = createResponse$FromGetResponse(getResponse, reqOptions)
-        }
 
-        response$ = responseProp ? response$
-          .map(response => ({
-          [responseProp]: response,
-          [requestProp]: reqOptions
-        })).catch((error) => {
-              throw {
-              error,
-              [requestProp]: reqOptions
-            }
-          }) : response$
-
+        let eagerPromise
         if (typeof reqOptions.eager === 'boolean' ? reqOptions.eager : eager) {
-          response$ = response$.replay(null, 1)
-          response$.connect()
+          eagerPromise = getResponsePromise(getResponse, reqOptions)
         }
+
+        const mapResponse = (res) =>
+          responseProp ? {
+              [responseProp]: res,
+              [requestProp]: reqOptions
+            } : res
+
+        const mapError = (err) =>
+          responseProp ? {
+              error: err,
+              [requestProp]: reqOptions
+          } : err
+
+
+        response$ = runSA.remember(runSA.adapt({}, (_, observer) => {
+          let next = (res) => observer.next(mapResponse(res))
+          let error = (err) => observer.error(mapError(err))
+          let complete = (res) => {
+            next(res)
+            observer.complete()
+          }
+          if (getProgressiveResponse) {
+            getProgressiveResponse(reqOptions, {
+              next, error, complete
+            })
+            return
+          }
+          let promise = eagerPromise || getResponsePromise(getResponse, reqOptions)
+          promise.then(complete, error)
+        }))
+
         if (requestProp){
           Object.defineProperty(response$, requestProp, {
             value: reqOptions,
             writable: false
           })
         }
+        observer.next(response$)
+      }),
+      error: observer.error,
+      complete: observer.complete
+    })
 
-        return response$
-      })
-      .replay(null, 1)
-    response$$.connect()
+    attachIsolateHelpers(runSA, response$$, {
+      isolateProp,
+      isolateNormalize
+    })
+    attachSelectHelper(runSA, response$$, {
+      selectHelper,
+      selectProp,
+      requestProp,
+      isolateProp,
+      isolateNormalize,
+      flattenHelpers,
+      flattenAllHelpers
+    })
+    attachFlattenHelpers(runSA, response$$, {
+      requestProp,
+      flattenHelpers,
+      flattenAllHelpers
+    })
 
-    var methodsToKeep = ['dispose']
-
-    if (isolate){
-      response$$.isolateSource = isolateSource || _isolateSource
-      response$$.isolateSink = isolateSink || _isolateSink
-      methodsToKeep.push('isolateSink', 'isolateSource')
-    }
+    runSA.streamSubscribe(response$$, {
+      next: () => {}, error: () => {}, complete: () => {}
+    })
 
     return response$$
   }
 
-  return attachHelpers(driver, options)
+  return driver
 }
 
-export {makeAsyncDriver as createDriver}
 export default makeAsyncDriver

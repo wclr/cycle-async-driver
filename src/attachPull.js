@@ -30,11 +30,11 @@ export const attachDispose = (response$$, subs) => {
 }
 
 export const attachPull = (driver, helperName, scopePrefix = 'pull_scope_') =>
-  (request$) => {
+  (request$, runSA) => {
     let allRequests$ = new Subject()
     let scopeCounter = 0
 
-    let response$$ = driver(allRequests$)
+    let response$$ = driver(allRequests$, runSA)
     let {isolateSink, isolateSource} = response$$
     const driverScope = scopePrefix + scopeCounter
 
