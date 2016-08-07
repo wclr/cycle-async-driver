@@ -1,19 +1,25 @@
 const isPromise = (p) => typeof p.then === 'function'
 
-const getResponsePromise = (getResponse, request) => {
-  let p
-  let promise = new Promise((resolve, reject) => {
-    p = {resolve, reject}
-  })
+const getResponsePromise = (getResponse, request, abortCallback) => {
+  let callbackResult
+  let callbackPromise
+  let handleCallback = () => {
+    let {err, result} = callbackResult
+    err ? callbackPromise.reject(err) : callbackPromise.resolve(result)
+  }
   let callback = (err, result) => {
-    err ? p.reject(err) : p.resolve(result)
+    callbackResult = {err, result}
+    callbackPromise && handleCallback()
   }
-  let res = getResponse(request, callback)
+  let res = getResponse(request, callback, abortCallback)
   if (res && isPromise(res)) {
-
-    promise = res
+    return res
+  } else {
+    return new Promise((resolve, reject) => {
+      callbackPromise = {resolve, reject}
+      callbackResult && handleCallback()
+    })
   }
-  return promise
 }
 
 export default getResponsePromise

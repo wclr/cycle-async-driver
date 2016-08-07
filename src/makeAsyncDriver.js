@@ -1,5 +1,4 @@
 import makeDriverSource from './makeDriverSource'
-import makeStreamSource from './makeStreamSource'
 import getResponsePromise from './getResponsePromise'
 
 const isFunction = (f) => typeof f === 'function'
@@ -10,22 +9,21 @@ const makeAsyncDriver = (options) => {
     getProgressiveResponse,
     requestProp = 'request',
     normalizeRequest = null,
-    lazy = false,
     isolate = true,
     isolateProp = '_namespace',
     isolateNormalize = null,
     selectHelperName = 'select',
     selectDefaultProp = 'category',
-    streamSource = false
+    lazy = false
     } = options
 
-  if (normalizeRequest && !isFunction(normalizeRequest)){
+  if (normalizeRequest && !isFunction(normalizeRequest)) {
     throw new Error(`'normalize' option should be a function.`)
   }
   if (normalizeRequest && !isolateNormalize){
     isolateNormalize = normalizeRequest
   }
-  if (isFunction(options)){
+  if (isFunction(options)) {
     getResponse = options
   }
   if (!isFunction(getResponse) && !isFunction(getProgressiveResponse)) {
@@ -36,43 +34,53 @@ const makeAsyncDriver = (options) => {
     if (!runStreamAdapter){
       throw new Error(`Stream adapter is required as second parameter`)
     }
-    const subscribe = (stream) =>
-      runStreamAdapter.streamSubscribe(stream, {
-        next: () => {}, error: () => {}, complete: () => {}
+    const empty = () => {}
+    const emptySubscribe = (stream) =>
+      runStreamAdapter.streamSubscribe((stream), {
+        next: empty,
+        error: empty,
+        complete: empty
       })
 
     const {observer, stream} = runStreamAdapter.makeSubject()
     const response$$ = runStreamAdapter.remember(stream)
-    subscribe(response$$)
+    emptySubscribe(response$$)
 
     runStreamAdapter.streamSubscribe(request$, {
       next: (request => {
-        const reqOptions = normalizeRequest
+        const requestNormalized = normalizeRequest
           ? normalizeRequest(request)
           : request
         let response$
-        let eagerPromise
-        let isLazyRequest = typeof reqOptions.lazy === 'boolean'
-          ? reqOptions.lazy : lazy
-
+        let isLazyRequest = typeof requestNormalized.lazy === 'boolean'
+          ? requestNormalized.lazy : lazy
         response$ = runStreamAdapter.adapt({}, (_, observer) => {
+          let dispose
+          const disposeCallback = (_) => dispose = _
           if (getProgressiveResponse) {
-            getProgressiveResponse(reqOptions, observer)
+            getProgressiveResponse(
+              requestNormalized, observer, disposeCallback
+            )
           } else {
-            let promise = eagerPromise || getResponsePromise(getResponse, reqOptions)
+            let promise = getResponsePromise(
+              getResponse, requestNormalized, disposeCallback
+            )
             promise.then((result) => {
               observer.next(result)
               observer.complete()
             }, observer.error)
           }
+          return () => {
+            isFunction(dispose) && dispose()
+          }
         })
         if (!isLazyRequest){
           response$ = runStreamAdapter.remember(response$)
-          subscribe(response$)
+          emptySubscribe(response$)
         }
         if (requestProp){
           Object.defineProperty(response$, requestProp, {
-            value: reqOptions,
+            value: requestNormalized,
             writable: false
           })
         }
@@ -82,7 +90,7 @@ const makeAsyncDriver = (options) => {
       complete: observer.complete
     })
 
-    const driverSource = makeDriverSource(response$$, {
+    return makeDriverSource(response$$, {
       runStreamAdapter,
       selectHelperName,
       selectDefaultProp,
@@ -91,10 +99,6 @@ const makeAsyncDriver = (options) => {
       isolateProp,
       isolateNormalize
     })
-
-    return streamSource
-      ? makeStreamSource(response$$, driverSource, {selectHelperName})
-      : driverSource
   }
 }
 

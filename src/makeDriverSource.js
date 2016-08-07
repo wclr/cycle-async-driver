@@ -26,7 +26,6 @@ const makeDriverSource = (response$$, options) => {
   let filterStream = makeFilter(runStreamAdapter)
 
   let driverSource = {
-    _res$$: response$$,
     filter (predicate) {
       const filteredResponse$$ = filterStream(response$$, predicate)
       return makeDriverSource(filteredResponse$$, options)
