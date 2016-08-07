@@ -1,5 +1,6 @@
 ### v1.4.0     
     * Added successAll and failureAll helpers
+    * select() without argument returns stream itself (to be compatible with future version)
 
 ### v1.3.0     
     * Added pull helper (two options: using new driver or using isolate mechanics)

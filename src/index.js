@@ -47,8 +47,7 @@ const makeSelectHelper = ({
       property = selectorProp
     }
     if (!match){
-      throw new Error(`Selector helper should have \`match\` ` +
-        `param which is string, regExp, or plain object with props.`)
+      return this
     }
     let makeTestSimple = (match) =>
       (match instanceof RegExp)
@@ -138,7 +137,7 @@ export const attachHelpers = (driver, options = {}) => {
   const response$$ = driver
   let {
     flatten = defaultFlattenHelpers,
-    flattenAll = defaultFlattenHelpers,
+    flattenAll = defaultFlattenAllHelpers,
     selectorMethod = defaultSelectorMethod,
     selectorProp = defaultSelectorProp,
     keepMethods = [],
