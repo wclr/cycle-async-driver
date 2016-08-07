@@ -14,7 +14,8 @@
     "build-watch": "babel -w src -d lib",
     "test": "node -r babel-register test/test.js",
     "test-watch": "node-dev --respawn -r babel-register test/test.js",
-    "prepublish": "npm run clean && npm run build"
+    "prepublish": "npm run clean && npm run build",
+    "vmd-readme": "vmd README.md"
   },
   "author": "whitecolor",
   "license": "ISC",
