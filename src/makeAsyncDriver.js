@@ -42,53 +42,53 @@ const makeAsyncDriver = (options) => {
         complete: empty
       })
 
-    const {observer, stream} = runStreamAdapter.makeSubject()
-    const response$$ = runStreamAdapter.remember(stream)
-    emptySubscribe(response$$)
-
-    runStreamAdapter.streamSubscribe(request$, {
-      next: (request => {
-        const requestNormalized = normalizeRequest
-          ? normalizeRequest(request)
-          : request
-        let response$
-        let isLazyRequest = typeof requestNormalized.lazy === 'boolean'
-          ? requestNormalized.lazy : lazy
-        response$ = runStreamAdapter.adapt({}, (_, observer) => {
-          let dispose
-          const disposeCallback = (_) => dispose = _
-          if (getProgressiveResponse) {
-            getProgressiveResponse(
-              requestNormalized, observer, disposeCallback
-            )
-          } else {
-            let promise = getResponsePromise(
-              getResponse, requestNormalized, disposeCallback
-            )
-            promise.then((result) => {
-              observer.next(result)
-              observer.complete()
-            }, observer.error)
-          }
-          return () => {
-            isFunction(dispose) && dispose()
-          }
-        })
-        if (!isLazyRequest){
-          response$ = runStreamAdapter.remember(response$)
-          emptySubscribe(response$)
-        }
-        if (requestProp){
-          Object.defineProperty(response$, requestProp, {
-            value: requestNormalized,
-            writable: false
+    let response$$ = runStreamAdapter.adapt({}, (_, observer) => {
+      runStreamAdapter.streamSubscribe(request$, {
+        next: (request => {
+          const requestNormalized = normalizeRequest
+            ? normalizeRequest(request)
+            : request
+          let response$
+          let isLazyRequest = typeof requestNormalized.lazy === 'boolean'
+            ? requestNormalized.lazy : lazy
+          response$ = runStreamAdapter.adapt({}, (_, observer) => {
+            let dispose
+            const disposeCallback = (_) => dispose = _
+            if (getProgressiveResponse) {
+              getProgressiveResponse(
+                requestNormalized, observer, disposeCallback
+              )
+            } else {
+              let promise = getResponsePromise(
+                getResponse, requestNormalized, disposeCallback
+              )
+              promise.then((result) => {
+                observer.next(result)
+                observer.complete()
+              }, observer.error)
+            }
+            return () => {
+              isFunction(dispose) && dispose()
+            }
           })
-        }
-        observer.next(response$)
-      }),
-      error: observer.error,
-      complete: observer.complete
+          if (!isLazyRequest){
+            response$ = runStreamAdapter.remember(response$)
+            emptySubscribe(response$)
+          }
+          if (requestProp){
+            Object.defineProperty(response$, requestProp, {
+              value: requestNormalized,
+              writable: false
+            })
+          }
+          observer.next(response$)
+        }),
+        error: observer.error,
+        complete: observer.complete
+      })
     })
+    response$$ = runStreamAdapter.remember(response$$)
+    emptySubscribe(response$$)
 
     return makeDriverSource(response$$, {
       runStreamAdapter,

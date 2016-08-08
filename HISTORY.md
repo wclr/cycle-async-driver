@@ -1,3 +1,14 @@
+### v2.0.0     
+    * Completly new version, with no stream lib dependendecies
+    * Driver source is not a stream.
+    * Only `select` (name is customizable) helpler
+    * Flatten helpers removed
+    * Pull helper removed    
+
+### v1.4.0     
+    * Added successAll and failureAll helpers
+    * select() without argument returns stream itself (to be compatible with future version)
+
 ### v1.3.0     
     * Added pull helper (two options: using new driver or using isolate mechanics)
 
