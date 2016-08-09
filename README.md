@@ -237,52 +237,6 @@ You can even create something like that:
 ```
 *It is all functional approach. Compose functions as you feel it needs to be.*
 
-#### Cancellation (and abortion)
-Basically, when you want request to be cancelled you should 
-stop listening to `response$` (response stream) corresponding 
-to particular request that should be canceled,
-often it is done using flattening the stream of responses 
-to the latest response:  
- 
-```js
-// rxjs
-myCoolDriver
-  .select('something_special')
-  .flatMapLatest() // or .switch()
-  .map(...)
-  // so here you will get only responses from last request started
-  // you won't see responses of the requets that started before 
-  // the last one and were not finished before  
-```
- 
- If you want to implement driver that on cancellation makes 
- some action - for example aborts not completed requests, you should follow this approach:
- 
-```js
-import {makeAsyncDriver} from 'cycle-async-driver'
- 
-// this example also shows you how to use `getProgressiveResponse`
-// say we have some `coolSource` to which we can make requests
-// and get some response stream back, 
-// and we want translate it to a cycle driver
-let myCoolDriver = makeAsyncDriver({
-  getProgressiveResponse: (request, observer, onDispose) => {  
-    const coolRequest = coolSource.makeRequest(request, (coolStream) => {
-      coolStream.on('data', observer.next)
-      coolStream.on('error', observer.error)
-      coolStream.on('end', observer.completed)
-    })
-    // third param of `getResponse` or `getProgressiveResponse`
-    // is a function `onDispose` that takes
-    // a handler which will be called when no listeners 
-    // is needing response for this request anymore,   
-    // in this case if it happens before the request is completed 
-    // you may want to abort it
-    onDispose(() => !coolRequest.isCompleted() && coolRequest.abort())   
-  }
-})
-```
-
 #### Lazy drivers and requests
 
 By default **all requests are eager** (start to perform a side effect just after 
@@ -321,6 +275,60 @@ by adding `lazy: true` (or `lazy: false`) option to the request inside your app'
   }),
 ```
 
+#### Cancellation (and abortion)
+Basically, when you want request to be cancelled you should 
+stop listening to corresponding `response$` (response stream).
+By default request in drivers are *eager* thus start without 
+subscription in you apps logic.
+
+That said request cancellation **works only for *lazy* requests** because such requests
+start on subscription creation and may be cancelled/aborted if subscription
+is dropped before request is finished to performed.
+
+Often automatic subscription drop is done using flattening the stream of responses 
+to the latest response:  
+ 
+```js
+// rxjs
+myCoolDriver
+  .select('something_special')
+  .flatMapLatest() // or .switch()
+  .map(...)
+  // so here you will get only responses from last request started
+  // you won't see responses of the requets that started before 
+  // the last one and were not finished before  
+```
+ 
+ If you want to implement driver that on cancellation makes 
+ some action - for example aborts not completed requests, you should 
+ follow this approach:
+ 
+```js
+import {makeAsyncDriver} from 'cycle-async-driver'
+ 
+// this example also shows you how to use `getProgressiveResponse`
+// say we have some `coolSource` to which we can make requests
+// and get some response stream back, 
+// and we want translate it to a cycle driver
+let myCoolDriver = makeAsyncDriver({
+  getProgressiveResponse: (request, observer, onDispose) => {  
+    const coolRequest = coolSource.makeRequest(request, (coolStream) => {
+      coolStream.on('data', observer.next)
+      coolStream.on('error', observer.error)
+      coolStream.on('end', observer.completed)
+    })
+    // third param of `getResponse` or `getProgressiveResponse`
+    // is a function `onDispose` that takes
+    // a handler which will be called when no listeners 
+    // is needing response for this request anymore,   
+    // in this case if it happens before the request is completed 
+    // you may want to abort it
+    
+    onDispose(() => !coolRequest.isCompleted() && coolRequest.abort())   
+  }
+})
+```
+Note that `onDispose` handler will be called always when request completed successfully.
 
 ## Tests
 ```

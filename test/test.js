@@ -1,4 +1,5 @@
-import rxCycle from '@cycle/rx-run'
+import xsCycle from '@cycle/xstream-run'
+import xs from 'xstream'
 import rxAdapter from '@cycle/rx-adapter'
 import {makeAsyncDriver} from '../lib/index'
 import {Observable as O, Subject} from 'rx'
@@ -6,13 +7,15 @@ import isolate from '@cycle/isolate'
 import test from 'tape'
 
 var basicDriver = makeAsyncDriver((request, _, setDispose) => {
-  let aborted = ''
-  setDispose(() => request.aborted = true)
+  let completed = false
+  setDispose(() => completed ? '' : request.aborted = true)
   return new Promise((resolve, reject) => {
-    setTimeout(() => request.name
+    setTimeout(() => {
+      request.name
         ? resolve('async ' + request.name)
         : reject('async error')
-      , 10)
+      completed = true
+    }, 10)
   })
 })
 
@@ -24,7 +27,6 @@ var lazyDriver = makeAsyncDriver({
   },
   lazy: true
 })
-
 
 var customDriver = makeAsyncDriver({
   requestProp: 'query',
@@ -67,16 +69,17 @@ test('Basic driver from promise', (t) => {
     })
 })
 
-test('Basic driver - cancellation with abort', (t) => {
+test('Basic driver - cancellation with abort (lazy requests)', (t) => {
   const requests = [
-    {name: 'John', category: 'john'},
-    {name: 'Alex', type: 'alex'}
+    {name: 'John', category: 'john', lazy: true},
+    {name: 'Alex', type: 'alex', lazy: true}
   ]
   const response = 'async Alex'
   const source = basicDriver(O.fromArray(requests).delay(0), rxAdapter)
 
   source.select()
     .switch()
+    .share()
     .subscribe(x => {
       t.ok(requests[0].aborted, 'fist request was aborted')
       t.deepEqual(x, response, 'response is correct')
@@ -129,21 +132,6 @@ test('Lazy driver (async callback)', (t) => {
     .subscribe(res2 => {
       console.log('here',  res1, res2)
       t.notEqual(res1, res2, 'response are different')
-      t.end()
-    })
-})
-
-test('Basic driver - request cancelling', (t) => {
-  const request = {name: 'John'}
-  const response = 'async John'
-  const source = basicDriver(O.of(request), rxAdapter)
-
-  source.select()
-    .do(r$ => t.deepEqual(r$.request, request, 'response$.request is present and correct'))
-    .mergeAll()
-    .take(1)
-    .subscribe(x => {
-      t.deepEqual(x, response, 'response')
       t.end()
     })
 })
@@ -263,4 +251,65 @@ test('Progressive response driver', (t) => {
         t.end()
       }
     })
+})
+
+test('XStream run cycle (isolation, cancellation)', (t) => {
+  const requests0 = [{name: 'John', lazy: true}, {name: 'Alex', lazy: true}]
+  const requests1 = [{name: 'Jane'}]
+
+  const Dataflow = ({driver, request$}, number) => {
+    return {
+      result: driver.select()
+        .flatten().map(data => ({
+          number, data
+        })),
+      driver: request$
+    }
+  }
+
+  const Main = ({driver}) => {
+    const dataflow0 = isolate(Dataflow, 'scope0')({
+      request$: xs.fromArray(requests0),
+      driver
+    }, '0')
+    const dataflow1 = isolate(Dataflow, 'scope1')({
+      request$: xs.fromArray(requests1),
+      driver
+    }, '1')
+    return {
+      result: xs.merge(dataflow0.result, dataflow1.result),
+      driver: xs.merge(dataflow0.driver, dataflow1.driver)
+    }
+  }
+  let count = 0
+  xsCycle.run(Main, {
+    result: (result$) => {
+      result$.addListener({
+        next: (res) => {
+          if (res.number === '0') {
+            t.is(res.data, 'async Alex')
+            count++
+          }
+          if (res.number === '1') {
+            t.is(res.data, 'async Jane')
+            t.is(res.data, 'async Jane')
+            count++
+          }
+          if (count >= 2){
+            setTimeout(() => {
+              t.is(count, 2, 'two requests done')
+              t.ok(requests0[0].aborted, 'first lazy request aborted')
+              t.notOk(requests0[1].aborted, 'second not aborted')
+              t.notOk(requests1[0].aborted, 'third not aborted')
+              t.end()
+            },50)
+          }
+        },
+        error: () => {},
+        complete: () => {}
+      })
+      return {}
+    },
+    driver: basicDriver
+  })
 })

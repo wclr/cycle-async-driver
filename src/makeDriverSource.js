@@ -7,8 +7,8 @@ const makeFilter = (streamAdapter) =>
             observer.next(r$)
           }
         },
-        error: observer.error,
-        complete: observer.complete
+        error: ::observer.error,
+        complete: ::observer.complete
       })
     })
 

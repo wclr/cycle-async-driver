@@ -44,19 +44,23 @@ const makeAsyncDriver = (options) => {
 
     let response$$ = runStreamAdapter.adapt({}, (_, observer) => {
       runStreamAdapter.streamSubscribe(request$, {
-        next: (request => {
+        next: (request) => {
           const requestNormalized = normalizeRequest
             ? normalizeRequest(request)
             : request
-          let response$
           let isLazyRequest = typeof requestNormalized.lazy === 'boolean'
             ? requestNormalized.lazy : lazy
-          response$ = runStreamAdapter.adapt({}, (_, observer) => {
+          let response$ = runStreamAdapter.adapt({}, (_, observer) => {
             let dispose
             const disposeCallback = (_) => dispose = _
             if (getProgressiveResponse) {
+              const contextFreeObserver = {
+                next: ::observer.next,
+                error: ::observer.error,
+                complete: ::observer.complete
+              }
               getProgressiveResponse(
-                requestNormalized, observer, disposeCallback
+                requestNormalized, contextFreeObserver, disposeCallback
               )
             } else {
               let promise = getResponsePromise(
@@ -65,7 +69,7 @@ const makeAsyncDriver = (options) => {
               promise.then((result) => {
                 observer.next(result)
                 observer.complete()
-              }, observer.error)
+              }, ::observer.error)
             }
             return () => {
               isFunction(dispose) && dispose()
@@ -82,9 +86,9 @@ const makeAsyncDriver = (options) => {
             })
           }
           observer.next(response$)
-        }),
-        error: observer.error,
-        complete: observer.complete
+        },
+        error: ::observer.error,
+        complete: ::observer.complete
       })
     })
     response$$ = runStreamAdapter.remember(response$$)
