@@ -1,4 +1,4 @@
-### v2.0.0     
+### v2.0.0-beta.0     
     * Completly new version, with no stream lib dependendecies
     * Driver source is not a stream.
     * Only `select` (name is customizable) helpler

@@ -7,8 +7,9 @@
 [1.x](https://github.com/whitecolor/cycle-async-driver/tree/e1edceb28fc808e755449c3dbf0073184135dfa8),
  which where using `rxjs4` and has some excessive features that where removed in 2.x.
 
+**Currently 2.0 (diversity) version is in beta, so use:**
 ```bash
-npm install cycle-async-driver -S
+npm install cycle-async-driver@beta -S
 ```
 
 Allows you easily create fully functional **cycle.js driver** 

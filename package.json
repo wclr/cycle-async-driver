@@ -1,6 +1,6 @@
 {
   "name": "cycle-async-driver",
-  "version": "2.0.0",
+  "version": "2.0.0-beta.0",
   "description": "Factory for creating async monadic cycle.js drivers",
   "keywords": [
     "cyclejs",
