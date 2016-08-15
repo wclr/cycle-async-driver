@@ -1,7 +1,7 @@
 const makeFilter = (streamAdapter) =>
   (stream, predicate) =>
-    streamAdapter.adapt({}, (_, observer) => {
-      return streamAdapter.streamSubscribe(stream, {
+    streamAdapter.adapt({}, (_, observer) =>
+      streamAdapter.streamSubscribe(stream, {
         next: (r$) => {
           if (predicate(r$)){
             observer.next(r$)
@@ -10,7 +10,7 @@ const makeFilter = (streamAdapter) =>
         error: ::observer.error,
         complete: ::observer.complete
       })
-    })
+    )
 
 const makeDriverSource = (response$$, options) => {
   let {

@@ -1,5 +1,7 @@
-import xsCycle from '@cycle/xstream-run'
 import xs from 'xstream'
+import xsCycle from '@cycle/xstream-run'
+import most from 'most'
+import mostCycle from '@cycle/most-run'
 import rxAdapter from '@cycle/rx-adapter'
 import {makeAsyncDriver} from '../lib/index'
 import {Observable as O, Subject} from 'rx'
@@ -34,9 +36,7 @@ var customDriver = makeAsyncDriver({
   isolateNormalize: (name) => ({name}),
   normalizeRequest: (request) => ({...request, normalized: true}),
   getResponse: (request, cb) => {
-    //setTimeout(() =>
-        cb(null, 'async ' + request.name)
-      //10)
+    cb(null, 'async ' + request.name)
   }
 })
 
@@ -253,7 +253,7 @@ test('Progressive response driver', (t) => {
     })
 })
 
-test('XStream run cycle (isolation, cancellation)', (t) => {
+test('xstream run (isolation, cancellation)', (t) => {
   const requests0 = [{name: 'John', lazy: true}, {name: 'Alex', lazy: true}]
   const requests1 = [{name: 'Jane'}]
 
@@ -302,7 +302,68 @@ test('XStream run cycle (isolation, cancellation)', (t) => {
               t.notOk(requests0[1].aborted, 'second not aborted')
               t.notOk(requests1[0].aborted, 'third not aborted')
               t.end()
-            },50)
+            }, 50)
+          }
+        },
+        error: () => {},
+        complete: () => {}
+      })
+      return {}
+    },
+    driver: basicDriver
+  })
+})
+
+test('most run (isolation, cancellation)', (t) => {
+  const requests0 = [{name: 'John', lazy: true}, {name: 'Alex', lazy: true}]
+  const requests1 = [{name: 'Jane'}]
+
+  const Dataflow = ({driver, request$}, number) => {
+    return {
+      result: driver.select()
+        .switch().map(data => ({
+          number, data
+        })),
+      driver: request$
+    }
+  }
+
+  const Main = ({driver}) => {
+    const dataflow0 = isolate(Dataflow, 'scope0')({
+      request$: most.from(requests0),
+      driver
+    }, '0')
+    const dataflow1 = isolate(Dataflow, 'scope1')({
+      request$: most.from(requests1),
+      driver
+    }, '1')
+    return {
+      result: most.merge(dataflow0.result, dataflow1.result),
+      driver: most.merge(dataflow0.driver, dataflow1.driver)
+    }
+  }
+  let count = 0
+  mostCycle.run(Main, {
+    result: (result$) => {
+      result$.subscribe({
+        next: (res) => {
+          if (res.number === '0') {
+            t.is(res.data, 'async Alex')
+            count++
+          }
+          if (res.number === '1') {
+            t.is(res.data, 'async Jane')
+            t.is(res.data, 'async Jane')
+            count++
+          }
+          if (count >= 2){
+            setTimeout(() => {
+              t.is(count, 2, 'two requests done')
+              t.ok(requests0[0].aborted, 'first lazy request aborted')
+              t.notOk(requests0[1].aborted, 'second not aborted')
+              t.notOk(requests1[0].aborted, 'third not aborted')
+              t.end()
+            }, 50)
           }
         },
         error: () => {},
