@@ -56,7 +56,7 @@ can be overridden by particular request options. *default value: **false***
 
 ## Usage
 
-#### Basic example
+### Basic example
 Let's create cycle.js driver which will be able to read files 
 using node.js `fs` module:
 
@@ -94,7 +94,7 @@ run(Main, {
 
 ```
 
-#### Metastream of responses
+### Metastream of responses
 
 `makeAsyncDriver` creates a driver function which accepts 
 stream of requests (`request$`) and returns driver source 
@@ -139,7 +139,7 @@ Each of `response$` streams
 Metastream `response$$` will produce an error only if `request$` 
 produces it and will **end** when `request$` stream completes.  
 
-#### Isolation
+### Isolation
 
 By default driver source will provider 
 [standard isolation](https://github.com/cyclejs/cyclejs/tree/master/isolate) 
@@ -150,7 +150,7 @@ Isolated driver source will automatically filter responses
 corresponding to requests belonging to isolation scope. 
 So parent components **have access to isolated child's** responses. 
 
-#### Requests error handling
+### Requests error handling
 
 As it was said that `select()` method returns metastream of responses
 (`response$$`), which produces response streams (`response$`) each of which 
@@ -212,7 +212,7 @@ HTTP.select()
   .flatten() 
 ```
 
-#### Accessing response/request pairs
+### Accessing response/request pairs
 Sometimes you may find yourself in a need to access corresponding
 response and request pairs, to do this follow such approach:
 
@@ -238,7 +238,7 @@ You can even create something like that:
 ```
 *It is all functional approach. Compose functions as you feel it needs to be.*
 
-#### Lazy drivers and requests
+### Lazy drivers and requests
 
 By default **all requests are eager** (start to perform a side effect just after 
 they get "into" the driver) and response streams (which correspond to particular request)
@@ -276,7 +276,7 @@ by adding `lazy: true` (or `lazy: false`) option to the request inside your app'
   }),
 ```
 
-#### Cancellation (and abortion)
+### Cancellation (and abortion)
 Basically, when you want request to be cancelled you should 
 stop listening to corresponding `response$` (response stream).
 By default request in drivers are *eager* thus start without 
