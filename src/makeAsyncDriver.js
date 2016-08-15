@@ -1,6 +1,4 @@
 import makeDriverSource from './makeDriverSource'
-import getResponsePromise from './getResponsePromise'
-
 const isFunction = (f) => typeof f === 'function'
 
 const makeAsyncDriver = (options) => {
@@ -63,13 +61,18 @@ const makeAsyncDriver = (options) => {
                 requestNormalized, contextFreeObserver, disposeCallback
               )
             } else {
-              let promise = getResponsePromise(
-                getResponse, requestNormalized, disposeCallback
-              )
-              promise.then((result) => {
-                observer.next(result)
-                observer.complete()
-              }, ::observer.error)
+              const callback = (err, result) => {
+                if (err){
+                  observer.error(err)
+                } else {
+                  observer.next(result)
+                  observer.complete()
+                }
+              }
+              let res = getResponse(request, callback, disposeCallback)
+              if (res && isFunction(res.then)){
+                res.then((result) => callback(null, result), callback)
+              }
             }
             return () => {
               isFunction(dispose) && dispose()
