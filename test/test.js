@@ -1,490 +1,376 @@
-import {run} from '@cycle/core'
-import {makeAsyncDriver, attachHelpers, success, failure, successAll, failureAll, select} from '../lib/index'
-import {Observable as O} from 'rx'
+import xs from 'xstream'
+import xsCycle from '@cycle/xstream-run'
+import most from 'most'
+import mostCycle from '@cycle/most-run'
+import rxAdapter from '@cycle/rx-adapter'
+import {makeAsyncDriver} from '../lib/index'
+import {Observable as O, Subject} from 'rx'
 import isolate from '@cycle/isolate'
 import test from 'tape'
 
-var simpleDriver = makeAsyncDriver((request) =>
-  O.create(observer => {
-    setTimeout(() => observer.onNext('async ' + request.name), 10)
+var basicDriver = makeAsyncDriver((request, _, setDispose) => {
+  let completed = false
+  setDispose(() => completed ? '' : request.aborted = true)
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      request.name
+        ? resolve('async ' + request.name)
+        : reject('async error')
+      completed = true
+    }, 10)
   })
-)
-
-var simpleDriverFromCallback = makeAsyncDriver({
-  getResponse: (request, cb) => {
-    setTimeout(() => cb(null, 'async ' + request.name), 10)
-  },
-  responseProp: true
 })
 
-var simpleDriverFromPromise = makeAsyncDriver({
-  getResponse: (request, cb) =>
-    // return promise
-    new Promise(resolve =>
-      setTimeout(() => resolve('async ' + request.name), 10)
-    ) 
-})
-
-var driverWithFailure = makeAsyncDriver({
-  normalizeRequest: (name) =>
-    typeof name === 'string' ? {name} : name,
-  getResponse: (request, cb) => {
-    return new Promise((resolve, reject) =>
-      request.name
-        ? resolve('async ' + request.name)
-        : reject('async error')
+var lazyDriver = makeAsyncDriver({
+  getResponse: (request, callback) => {
+    setTimeout(() =>
+      callback(null, 'async ' + request.name + Math.random())
     )
   },
-  responseProp: true
+  lazy: true
 })
 
-var driverWithPull = makeAsyncDriver({
-  usePullDriver: false,
-  normalizeRequest: (name) =>
-    typeof name === 'string' ? {name} : name,
-  getResponse: (request, cb) => {
-    return new Promise((resolve, reject) =>
-      request.name
-        ? resolve('async ' + request.name)
-        : reject('async error')
-    )
-  },
-  responseProp: true
-})
-
-
-
-var asyncDriver = makeAsyncDriver({
-  createResponse$: (request) =>
-    O.create(observer => {
-      setTimeout(() => request.name
-        ? observer.onNext({asyncName: 'async ' + request.name})
-        : observer.onError('async error'), 10)
-    }),
+var customDriver = makeAsyncDriver({
   requestProp: 'query',
-  normalizeRequest: (name) =>
-    typeof name === 'string'
-      ? {name: name.toUpperCase()}
-      : {...name, name: name.name.toUpperCase()},
   isolateProp: '_scope',
-  isolateMap: (name) =>
-    typeof name === 'string' ? {name} : name
+  isolateNormalize: (name) => ({name}),
+  normalizeRequest: (request) => ({...request, normalized: true}),
+  getResponse: (request, cb) => {
+    cb(null, 'async ' + request.name)
+  }
 })
 
-test('Basic request with simple driver', (t) => {
-  const main = ({async}) => {
-    return {
-      async: O.just({name: 'John'}),
-      result: async.switch()
-    }
+var progressiveDriver = makeAsyncDriver({
+  getProgressiveResponse: (request, observer) => {
+    setTimeout(() => {
+      observer.next(1)
+      setTimeout(() => {
+        observer.next(2)
+      })
+      setTimeout(() => {
+        observer.next(3)
+        observer.complete()
+      })
+    })
   }
-  run(main, {
-    async: simpleDriver,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r, 'async John')
+})
+
+test('Basic driver from promise', (t) => {
+  const request = {name: 'John'}
+  const response = 'async John'
+  const source = basicDriver(O.of(request), rxAdapter)
+
+  source.select()
+    .do(r$ => t.deepEqual(r$.request, request, 'response$.request is present and correct'))
+    .mergeAll()
+    .subscribe(x => {
+      t.deepEqual(x, response, 'response')
+      t.end()
+    })
+})
+
+test('Basic driver - cancellation with abort (lazy requests)', (t) => {
+  const requests = [
+    {name: 'John', category: 'john', lazy: true},
+    {name: 'Alex', type: 'alex', lazy: true}
+  ]
+  const response = 'async Alex'
+  const source = basicDriver(O.fromArray(requests).delay(0), rxAdapter)
+
+  source.select()
+    .switch()
+    .share()
+    .subscribe(x => {
+      t.ok(requests[0].aborted, 'fist request was aborted')
+      t.deepEqual(x, response, 'response is correct')
+      t.end()
+    })
+})
+
+test('Basic driver - select method', (t) => {
+  const requests = [
+    {name: 'John', category: 'john'},
+    {name: 'Alex', type: 'alex'}
+  ]
+  const responses = ['async John', 'async Alex']
+  const source = basicDriver(O.fromArray(requests).delay(0), rxAdapter)
+
+  source.select('john')
+    .do(r$ => t.deepEqual(r$.request, requests[0], 'response$.request is present and correct'))
+    .mergeAll()
+    .subscribe(x => {
+      t.deepEqual(x, responses[0], 'response 1 is correct')
+    })
+
+  source.select(r => r.type === 'alex')
+    .do(r$ => t.deepEqual(r$.request, requests[1], 'response$.request is present and correct'))
+    .mergeAll()
+    .subscribe(x => {
+      t.deepEqual(x, responses[1], 'response 2 is correct')
+    })
+
+  source.select().mergeAll()
+    .bufferWithCount(2)
+    .filter(x => x.length == 2)
+    .subscribe(x => t.end())
+})
+
+test('Lazy driver (async callback)', (t) => {
+  const request = {name: 'John'}
+  //const response = 'async John'
+  const source = lazyDriver(O.of(request), rxAdapter)
+  let res1
+  source.select()
+    .mergeAll()
+    .subscribe(x => {
+      res1 = x
+    })
+
+  source.select()
+    .mergeAll()
+    .delay(100)
+    .subscribe(res2 => {
+      console.log('here',  res1, res2)
+      t.notEqual(res1, res2, 'response are different')
+      t.end()
+    })
+})
+
+test('Basic driver - source filter method', (t) => {
+  const requests = [
+    {name: 'John', category: 'john'},
+    {name: 'Alex', type: 'alex'}
+  ]
+  const responses = ['async John', 'async Alex']
+  const source = basicDriver(O.fromArray(requests).delay(0), rxAdapter)
+
+  source
+    .filter(r$ => r$.request.category === 'john')
+    .select()
+    .do(r$ => t.deepEqual(r$.request, requests[0], 'response$.request is present and correct'))
+    .mergeAll()
+    .subscribe(x => {
+      t.deepEqual(x, responses[0], 'response')
+    })
+
+  source.select()
+    .mergeAll()
+    .bufferWithCount(2)
+    .filter(x => x.length === 2)
+    .subscribe(x => {
+      t.end()
+    })
+})
+
+test('Basic driver isolation', (t) => {
+  const request = {name: 'John'}
+  const response = 'async John'
+
+  const expected = {name: 'asyncJohn'}
+
+  const dataflow = ({source}) => {
+    source.select()
+      .do(r$ => {
+        t.same(r$.request.name, 'John', 'request is correct')
+        t.same(r$.request._namespace, ['scope0'], 'request _namespace is correct')
+      })
+      .mergeAll()
+      .subscribe(x => {
+        t.deepEqual(x, response, 'response')
         t.end()
       })
-    }
-  })
-})
-
-test('Basic request with simple driver (from callback)', (t) => {
-  const main = ({async}) => {
     return {
-      async: O.just({name: 'John'}),
-      result: async.switch()
+      source: O.of(request)
     }
   }
-  run(main, {
-    async: simpleDriverFromCallback,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r.response, 'async John')
+  const request$ = new Subject()
+  const source = basicDriver(request$, rxAdapter)
+  isolate(dataflow, 'scope0')({source}).source.subscribe((request) => {
+    request$.onNext(request)
+  })
+  request$.onNext({name: 'Alex', _namespace: ['scope1']})
+})
+
+test('Basic driver from promise failure', (t) => {
+  const request = {name: ''}
+  const source = basicDriver(O.of(request), rxAdapter)
+  const expected = {name: 'asyncJohn'}
+
+  source.select()
+    .map(r$ => r$.catch(O.of('error')))
+    .mergeAll()
+    .subscribe(x => {
+      t.deepEqual(x, 'error', 'error sent')
+      t.end()
+    })
+})
+
+test('Custom source driver with isolation, normalization and sync callback', (t) => {
+  const request = 'John'
+  const response = 'async John'
+
+  const expected = {name: 'asyncJohn'}
+
+  const dataflow = ({source}) => {
+    source.select()
+      .do(({query}) => {
+        t.same(query.name, 'John', 'request is correct')
+        t.same(query._scope, ['scope0'], 'request _namespace is correct')
+        t.ok(query.normalized, 'request is normalized')
+      })
+      .mergeAll()
+      .subscribe(x => {
+        t.deepEqual(x, response, 'response is correct')
         t.end()
       })
-    }
-  })
-})
-
-test('Basic request with simple driver (from promise)', (t) => {
-  const main = ({async}) => {
     return {
-      async: O.just({name: 'John'}),
-      result: async.switch()
+      source: O.of(request)
     }
   }
-  run(main, {
-    async: simpleDriverFromPromise,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r, 'async John')
+  const request$ = new Subject()
+  const source = customDriver(request$, rxAdapter)
+  isolate(dataflow, 'scope0')({source}).source
+    .subscribe((request) => {
+      request$.onNext(request)
+    })
+  request$.onNext('Alex')
+})
+
+test('Progressive response driver', (t) => {
+  const request = {name: 'John'}
+  const response = 'async John'
+  const source = progressiveDriver(O.of(request), rxAdapter)
+  let values = []
+  source.select()
+    .do(r$ => t.deepEqual(r$.request, request, 'response$.request is present and correct'))
+    .mergeAll()
+    .subscribe(x => {
+      values.push(x)
+      if (values.length === 3){
+        t.deepEqual(values, [1, 2, 3], 'progressive response is ok')
         t.end()
-      })
-    }
-  })
+      }
+    })
 })
 
-test('Basic request', (t) => {
-  const main = ({async}) => {
-    return {
-      async: O.just('John'),
-      result: async.switch()
-    }
-  }
-  run(main, {
-    async: asyncDriver,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r.asyncName, 'async JOHN')
-        t.end()
-      })
-    }
-  })
-})
+test('xstream run (isolation, cancellation)', (t) => {
+  const requests0 = [{name: 'John', lazy: true}, {name: 'Alex', lazy: true}]
+  const requests1 = [{name: 'Jane'}]
 
-test('Two isolated requests', (t) => {
-  const SendQuery = ({params, async}) => {
+  const Dataflow = ({driver, request$}, number) => {
     return {
-      async: O.just(params),
-      result: async
+      result: driver.select()
+        .flatten().map(data => ({
+          number, data
+        })),
+      driver: request$
     }
   }
-  const main = ({async}) => {
-    let query1 = isolate(SendQuery)({params: {name: 'John'}, async})
-    let query2 = isolate(SendQuery)({params: 'Jane', async})
+
+  const Main = ({driver}) => {
+    const dataflow0 = isolate(Dataflow, 'scope0')({
+      request$: xs.fromArray(requests0),
+      driver
+    }, '0')
+    const dataflow1 = isolate(Dataflow, 'scope1')({
+      request$: xs.fromArray(requests1),
+      driver
+    }, '1')
     return {
-      async: O.merge(query1.async, query2.async.delay(1)),
-      result: O.merge([
-        query1.result, query2.result
-      ]).flatMap(r$ => r$.do(r => r.query = r$.query))
+      result: xs.merge(dataflow0.result, dataflow1.result),
+      driver: xs.merge(dataflow0.driver, dataflow1.driver)
     }
   }
   let count = 0
-  run(main, {
-    async: asyncDriver,
-    result: (response$) => {
-      response$.forEach(r => {
-        if (r.asyncName == 'async JOHN'){
-          t.is(r.query.name, 'JOHN', 'custom `query` request property has normalized request')
-          t.ok(r.query._scope, 'custom `_scope` property is ok')
-        }
-        if (r.asyncName == 'async JANE'){
-          t.is(r.query.name, 'JANE', 'custom `query` request property has normalized request')
-          t.ok(r.query._scope, 'custom `_scope` property is ok')
-        }
-        if (++count === 2){
-          setTimeout(() => {
-            t.is(count, 2, 'responses count is ok, isolation is ok')
-            t.end()
-          })
-        }
-      })
-    }
-  })
-})
-
-test('success and failure helpers', (t) => {
-  let mergedCount = 0
-  let successCount = 0
-  let failureCount = 0
-  const main = ({async}) => {
-    return {
-      async: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
-      merged: async.mergeAll().catch(O.empty()),
-      success: async
-        .filter(r$ => r$.request.name)
-        .filter(r$ => r$.request.name !== 'Alex')
-        .success(({response, request}) =>
-        ({response: response + ' mapped', request})
-      ),
-      fail: async.failure(({error, request}) =>
-        ({error: error + ' mapped', request})
-      )
-    }
-  }
-  run(main, {
-    async: driverWithFailure,
-    merged: (response$) => {
-      var count = 0
-      response$.subscribe(r => {
-        mergedCount++
-      })
-    },
-    success: (response$) => {
-      response$.subscribe(r => {
-        successCount++
-        t.is(r.response, `async ${r.request.name} mapped`, 'success response mapped')
-      })
-    },
-    fail: (error$) => {
-      error$.subscribe(r => {
-        failureCount++
-        t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
-        t.is(r.request.name, '', 'error contains request')
-      })
-    }
-  })
-  setTimeout(() => {
-    t.is(mergedCount, 2, 'merged count correct')
-    t.is(successCount, 4, 'success count correct')
-    t.is(failureCount, 2, 'failure count correct')
-    t.end()
-  }, 500)
-})
-
-test('detached success and failure helpers', (t) => {
-  let mergedCount = 0
-  let successCount = 0
-  let failureCount = 0
-  const main = ({async}) => {
-    return {
-      async: O.from([
-        'John',
-        'Mary',
-        {name: '', maker: true},
-        'Alex',
-        '',
-        'Jane',
-        {name: '', maker: true},
-        'Mike'
-      ]).delay(1),
-      merged: async.mergeAll().catch(O.empty()),
-      success: async
-        .filter(r$ => r$.request.name)
-        .let(select({name: (_) => !/Alex/.test(_)}))
-        .let(
-          successAll(({response, request}) =>
-            ({response: response + ' mapped', request})
-          )
-        ),
-      fail: select(async, {maker: true}).let(failureAll).map(({error, request}) =>
-        ({error: error + ' mapped', request})
-      )
-    }
-  }
-  run(main, {
-    async: driverWithFailure,
-    merged: (response$) => {
-      var count = 0
-      response$.subscribe(r => {
-        mergedCount++
-      })
-    },
-    success: (response$) => {
-      response$.subscribe(r => {
-        successCount++
-        //console.log('success', r)
-        t.is(r.response, `async ${r.request.name} mapped`, 'success response mapped')
-      })
-    },
-    fail: (error$) => {
-      error$.subscribe(r => {
-        failureCount++
-        t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
-        t.is(r.request.name, '', 'error contains request')
-      })
-    }
-  })
-  setTimeout(() => {
-    t.is(mergedCount, 2, 'merged count correct')
-    t.is(successCount, 4, 'success count correct')
-    t.is(failureCount, 2, 'failure count correct')
-    t.end()
-  }, 500)
-})
-
-
-test('select helper', (t) => {
-  let selectedCount = 0
-  let selectedWithObjCount = 0
-  let selectedWithPropCount = 0
-  const main = ({async}) => {
-    return {
-      async: O.from([
-        {name: 'John', category: 'good'},
-        {name: 'Alex', category: 'bad'},
-        {name: 'Jane', category: 'good'}
-      ]).delay(0),
-      selected: async.select('good'),
-      selectedWithObj: async.select({name: 'Alex'}),
-      selectedWithProp: async.select('name', 'Alex')
-    }
-  }
-  run(main, {
-    async: simpleDriver,
-    selected: (response$) => {
-      response$.subscribe(r => {
-        selectedCount++
-      })
-    },
-    selectedWithObj: (response$) => {
-      response$.subscribe(r => {
-        selectedWithObjCount++
-      })
-    },
-    selectedWithProp: (response$) => {
-      response$.subscribe(r => {
-        selectedWithPropCount++
-      })
-    }
-  })
-  setTimeout(() => {
-    t.is(selectedCount, 2, 'selected with simple match count correct')
-    t.is(selectedWithObjCount, 1, 'selected with object match count correct')
-    t.is(selectedWithPropCount, 1, 'selected with property match count correct')
-    t.end()
-  }, 100)
-})
-
-test('attachHelpers: custom helpers attached', (t) => {
-  asyncDriver = attachHelpers(asyncDriver, {
-    flattenAll: ['successful', 'failed'],
-    selectorMethod: 'onlyIf',
-    requestProp: 'query'
-  })
-
-  let mergedCount = 0
-  let successCount = 0
-  let failureCount = 0
-  const main = ({asyncDriver}) => {
-    return {
-      asyncDriver: O.of('John', 'Mary', '', 'Alex', 'Jane', '', 'Mike').delay(1),
-      merged: asyncDriver.mergeAll().catch(O.empty()),
-      success: asyncDriver.onlyIf({name: _ => _ !== 'ALEX'})
-        .successful((response, query) =>
-          ({response: response.asyncName + ' mapped', query})
-        ),
-      fail: asyncDriver.failed((error, query) =>
-          ({error: error + ' mapped', query})
-      )
-    }
-  }
-  run(main, {
-    asyncDriver: asyncDriver,
-    merged: (response$) => {
-      var count = 0
-      response$.subscribe(r => {
-        mergedCount++
-      })
-    },
-    success: (response$) => {
-      response$.subscribe(r => {
-        successCount++
-        t.is(r.response, `async ${r.query.name} mapped`, 'success response mapped')
-      })
-    },
-    fail: (error$) => {
-      error$.subscribe(r => {
-        failureCount++
-        t.is(r.error, 'async error mapped', 'error in `error` wrapped ok')
-        t.is(r.query.name, '', 'error contains request')
-      })
-    }
-  })
-  setTimeout(() => {
-    t.is(mergedCount, 2, 'merged count correct')
-    t.is(successCount, 4, 'success count correct')
-    t.is(failureCount, 2, 'failure count correct')
-    t.end()
-  }, 500)
-})
-
-
-test('Pull request', (t) => {
-  const main = ({async}) => {
-    return {
-      result: async.pull(O.just({name: 'John'})).mergeAll()
-    }
-  }
-  run(main, {
-    async: driverWithFailure,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r.response, 'async John')
-        t.end()
-      })
-    }
-  })
-})
-
-test('Static pull request with sampler stream', (t) => {
-  const main = ({async}) => {
-    let sampler$ = O.interval(10)
-      //.do(x => console.log('tick'))
-    //let sampler$ = O.just(1000).do(x => console.log('tick'))
-    return {
-      result: async.pull({name: 'John'}, sampler$).mergeAll()
-    }
-  }
-  const {sources, sinks} = run(main, {
-    async: driverWithFailure,
-    result: (response$) => {
-      response$.subscribe(r => {
-        sinks.dispose()
-        sources.dispose()
-        t.is(r.response, 'async John')
-        t.end()
+  xsCycle.run(Main, {
+    result: (result$) => {
+      result$.addListener({
+        next: (res) => {
+          if (res.number === '0') {
+            t.is(res.data, 'async Alex')
+            count++
+          }
+          if (res.number === '1') {
+            t.is(res.data, 'async Jane')
+            t.is(res.data, 'async Jane')
+            count++
+          }
+          if (count >= 2){
+            setTimeout(() => {
+              t.is(count, 2, 'two requests done')
+              t.ok(requests0[0].aborted, 'first lazy request aborted')
+              t.notOk(requests0[1].aborted, 'second not aborted')
+              t.notOk(requests1[0].aborted, 'third not aborted')
+              t.end()
+            }, 50)
+          }
+        },
+        error: () => {},
+        complete: () => {}
       })
       return {}
-    }
-  })
-})
-
-test('Pull request (no pull driver)', (t) => {
-  let count = 0
-  let pullCount = 0
-
-  const main = ({async}) => {
-    var pull$ = async.pull(O.just({name: 'John'}))
-    t.is(typeof pull$.success, 'function', 'pull stream should have `success` method')
-    return {
-      async: O.just({name: 'Mary'}).delay(10),
-      result: async.mergeAll(),
-      pullResult: pull$.success()
-    }
-  }
-  run(main, {
-    async: driverWithPull,
-    result: (response$) => {
-      response$.subscribe(r => {
-        //console.log('response,', r)
-        count++
-        t.is(r.response, 'async Mary')
-      })
     },
-    pullResult: (response$) => {
-      response$.subscribe(r => {
-        //console.log('pull response,', r)
-        pullCount++
-        t.is(r.response, 'async John')
-      })
-    }
+    driver: basicDriver
   })
-  setTimeout(() => {
-    t.is(count, 1, 'count of standard responses should be correct')
-    t.is(pullCount, 1, 'count of pull responses should be correct')
-    t.end()
-  }, 100)
 })
 
-test('Static pull request w/o sampler', (t) => {
-  const main = ({async}) => {
+test('most run (isolation, cancellation)', (t) => {
+  const requests0 = [{name: 'John', lazy: true}, {name: 'Alex', lazy: true}]
+  const requests1 = [{name: 'Jane'}]
+
+  const Dataflow = ({driver, request$}, number) => {
     return {
-      result: async.pull({name: 'John'})
-        .mergeAll()
+      result: driver.select()
+        .switch().map(data => ({
+          number, data
+        })),
+      driver: request$
     }
   }
-  run(main, {
-    async: driverWithFailure,
-    result: (response$) => {
-      response$.subscribe(r => {
-        t.is(r.response, 'async John')
 
-        setTimeout(() => {
-          t.end()
-        }, 5000)
-      })
+  const Main = ({driver}) => {
+    const dataflow0 = isolate(Dataflow, 'scope0')({
+      request$: most.from(requests0),
+      driver
+    }, '0')
+    const dataflow1 = isolate(Dataflow, 'scope1')({
+      request$: most.from(requests1),
+      driver
+    }, '1')
+    return {
+      result: most.merge(dataflow0.result, dataflow1.result),
+      driver: most.merge(dataflow0.driver, dataflow1.driver)
     }
+  }
+  let count = 0
+  mostCycle.run(Main, {
+    result: (result$) => {
+      result$.subscribe({
+        next: (res) => {
+          if (res.number === '0') {
+            t.is(res.data, 'async Alex')
+            count++
+          }
+          if (res.number === '1') {
+            t.is(res.data, 'async Jane')
+            t.is(res.data, 'async Jane')
+            count++
+          }
+          if (count >= 2){
+            setTimeout(() => {
+              t.is(count, 2, 'two requests done')
+              t.ok(requests0[0].aborted, 'first lazy request aborted')
+              t.notOk(requests0[1].aborted, 'second not aborted')
+              t.notOk(requests1[0].aborted, 'third not aborted')
+              t.end()
+            }, 50)
+          }
+        },
+        error: () => {},
+        complete: () => {}
+      })
+      return {}
+    },
+    driver: basicDriver
   })
 })

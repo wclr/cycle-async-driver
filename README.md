@@ -1,283 +1,335 @@
 # cycle-async-driver
-Higher order factory for creating [cycle.js](http://cycle.js.org) async request based drivers.
-Allows you almost completely eliminate boilerplate code for this kind of drivers.
+> Higher order factory for creating [cycle.js](http://cycle.js.org) async request/response drivers.
 
-To put it simple: **Create fully functional cycle.js driver from async function with callback or promise**
+![npm (scoped)](https://img.shields.io/npm/v/cycle-async-driver.svg?maxAge=86400)
 
-## What is that?
-Lets say you want to create simple (node) File System readFile driver: 
-* you send requests (to sink) like `{path: 'path/to/file', stats: true}` 
-* you get responses (from source) like `{data: FILEDATA, stats: FILESTATS}`
+> Notice that API of version 2.x has significantly changed since 
+[1.x](https://github.com/whitecolor/cycle-async-driver/tree/e1edceb28fc808e755449c3dbf0073184135dfa8),
+ which where using `rxjs4` and has some excessive features that where removed in 2.x.
 
-Or maybe you want to create some other *async driver* of the same type `(request) -> async response` 
-that makes queries to **database/storage/queue**. 
+**Currently 2.0 (diversity) version is in beta, so use:**
+```bash
+npm install cycle-async-driver@beta -S
+```
 
-Basically in this case you:
-* probably want responses from driver be a "metastream" of responses (as they are async - witch response is a stream itself)
-* may want it either *lazy* (start only when response$ has active subscribers) or *eager* (do request anyway immediately)
-* may want build-in standard *isolate* mechanics (provided by `@cycle/isolate`)
+Allows you easily create fully functional **cycle.js driver** 
+which side effect is executed using async function with **promise or callback**.
+It also can serve as a simple backbone for your more sophisticated driver.
 
-How do you create such driver? If you do it first time, you probably go to source code of official 
-[cycle HTTP driver](https://github.com/cyclejs/http/blob/master/src/http-driver.js) 
-which basically has the same *async request/response* nature and end up with something like this for your 
-FS readFile driver:
+Such driver will work in the same manner as 
+[official cycle HTTP driver](https://github.com/cyclejs/cyclejs/tree/master/http), so basically:
 
-## *Without* `cycle-async-driver`
+* driver sink will expect stream of requests
+* driver source will provide you with "metastream" of responses
+* driver source will provide  standard *isolate* mechanics (`@cycle/isolate`)
+* driver will be compatible with any stream library that cycle.js can work with 
+(it doesn't use any under the hood, but uses cyclejs stream adapter's API).
+
+## API
+
+### `makeAsyncDriver`
+
+Async driver factory.
+
+- `getResponse` *(Function)*: function that takes `request` object as first param 
+and `callback` as second param 
+returns any kind of Promise or uses passed node style `callback` 
+to give back async response for passed `request`. **required** (if no `getProgressiveResponse`)
+
+- `getProgressiveResponse` *(Function)*: function that takes `request` object as first param 
+and `observer` object as second param which allows to create a custom response 
+containing more then one value. **required** (if no `getResponse`)
+
+- `normalizeRequest` *(Function)*: transform function that will be applied to the request before handling.
+
+- `requestProp` *(String)*: name of the property that will be attached to every response stream. *default value: **request***
+
+- `isolate` *(Boolean)*: makes driver ready to work with [`@cycle/isolate`](#isolation). *default value: **true***
+
+- `isolateNormalize` *(Function)*: transform function that will be 
+applied to the request before its isolation, if not present `normalizeRequest` will be used instead.
+
+- `isolateProp` *(String)*:  name of the property that will be used for keeping isolation namespace. *default value: **_namespace***
+
+- `lazy` *(Boolean)*: makes all driver requests [lazy](#lazy-drivers-and-requests) by default, 
+can be overridden by particular request options. *default value: **false***
+
+## Usage
+
+#### Basic example
+Let's create cycle.js driver which will be able to read files 
+using node.js `fs` module:
 
 ```js
-import {Observable as O} from 'rx'
+import {makeAsyncDriver} from 'cycle-async-driver'
 import fs from 'fs'
+import {run} from '@cycle/rx-run' 
+import {Observable as O} from 'rx'
+ 
+let readFileDriver = makeAsyncDriver((request, callback) => {
+  fs.readFile(requst.path, request.encoding || 'utf-8', callback)
+  // instead of using `callback` param you may return Promise 
+})
 
-const isolateSink = (request$, scope) => {
-  return request$.map(req => {
-    if (typeof req === 'string') {
-      return {path: req, _namespace: [scope]}
-    }
-    req._namespace = req._namespace || []
-    req._namespace.push(scope)
-    return req
-  })
-}
+...
 
-const isolateSource = (response$$, scope) => {
-  let isolatedResponse$$ = response$$.filter(res$ =>
-    Array.isArray(res$.request._namespace) &&
-    res$.request._namespace.indexOf(scope) !== -1
-  )
-  isolatedResponse$$.isolateSource = isolateSource
-  isolatedResponse$$.isolateSink = isolateSink
-  return isolatedResponse$$
-}
-
-const normalizeRequest = (request) => {
-  if (typeof request === 'string') {
-    return {path: request}
-  } else {
-    return request
+const Main = ({readFile}) => {
+  return {
+    readFile: O.of({path: '/path/to/file/to/read'}),
+    output: read
+      .select()
+      // select() is used to get all response$ streams
+      // you may also filter responses by `category` field 
+      // or by request filter function      
+      .mergeAll()
+      // as we get metastream of responses - 
+      // we should flatten it to get file data 
   } 
-} 
-
-export function makeFileReadDriver (options) {
-  const createResponse$ = (request) => {
-    let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
-    return options.stats || request.stats
-      ? O.combineLatest([
-      readFile$,
-      O.fromNodeCallback(fs.stat, fs)(request.path),
-    ]).map(([data, stat]) => ({data, stat}))
-      : readFile$.map(data => ({data}))
-  }
-  
-  return function driver (request$) {
-    let response$$ = request$
-      .map(request => {
-        const reqOptions = normalizeRequest(request)
-        let response$ = createResponse$(reqOptions)
-        if (typeof reqOptions.eager === 'boolean' ? reqOptions.eager : eager) {
-          response$ = response$.replay(null, 1)
-          response$.connect()
-        }
-        Object.defineProperty(response$, 'request', {
-          value: reqOptions,
-          writable: false
-        })
-        return response$
-      })
-      .replay(null, 1)
-    response$$.connect()
-    if (isolate){
-      response$$.isolateSource = isolateSource
-      response$$.isolateSink = isolateSink
-    }
-    return response$$
-  }
 }
+
+run(Main, {
+  output: (ouput$) => ouput$.forEach(::console.log) 
+  readFile: readFileDriver
+})
+
 ```
 
-## With `cycle-async-driver`
+#### Metastream of responses
 
-But actually it could be a little bit simpler. With `cycle-async-driver` 
-you can **eliminate amost allof boilerplate** from your *lazy* File System readFile driver:
+`makeAsyncDriver` creates a driver function which accepts 
+stream of requests (`request$`) and returns driver source 
+which is an object that you use to access responses that come from the driver.
 
-Simple case with standard `makeAsyncDriver` options:
-```js
-export const makeReadFileDriver = (options) => 
-  makeAsyncDriver((request, callback) => {
-      let readFile$ = O.fromNodeCallback(fs.readFile, fs)(request.path)
-      return options.stats || options.stats
-        ? O.combineLatest([
-        readFile$,
-        O.fromNodeCallback(fs.stat, fs)(request.path),
-      ]).map(([data, stat]) => ({data, stat}))
-        : readFile$.map(data => ({data}))
-    })  
-```
+To access responses driver sources provides special selector method 
+(`select` is default name) which takes nothing or *string* `category` 
+(default name of selector property) and returns stream with all responses 
+or filtered by request's `category` field.
 
-You may use also create driver using old node callback style returns, if you like this, 
-`cycle-async-driver` will create observable response$ for you:
-```js
-export const makeReadFileDriver = (options) => 
-  makeAsyncDriver((request, callback) => {
-      if (options.stats || options.stats){
-        fs.stat(request.path, (err, stats) => {
-          err 
-            ? callback(err)
-            : fs.readFile(request.path, (err, data) => {
-              callback(err, {data, stats})
-            })
-        })
-      } else {
-        fs.readFile(request.path, (err, data) => {
-           callback(err, {data})
-        })
-      }  
-    })  
-```
-Instead of using callback you also may return *native* `Promise` from `getResponse` function.
-
-So what do you get using this helper to create your *async request/response* drivers:
-
-* get rid of boilerplate code in your driver
-* may be sure that you get your *eager/lasy* "metastream" of responses
-* may be sure that standard *isolate* mechanics for your driver works.
-* need just to ensure (to test) you technical domain driver logic
-* it is also great for creating **mock drivers for your tests**
-
-##Options 
-Options passed to `makeAsyncDriver` helper:
-* **createResponse$** (required, if no **getResponse**) - function that takes `request` and returns `response$`
-* **getResponse** (required, if no **createResponse$**) - function that takes `request` and returns `Promise` or uses second passed `callback` param to return callback in node style.
-* **requestProp** (default: `request`) - name of property that is *attached* to `response$` that will contain *normalized* request data, can be `false`
-* **responseProp** (default: `false`) - if set to `false`, `response$` items will contain corresponding `request` 
-be wrapped in `{response: ..., request: ....}`, if this prop set to `true` 
-then default name value `response` is used.
-* **normalizeRequest** (default: `_ => _`) - function of `request` normalization
-* **eager** (default: `true`) - makes `response$` *eager* (hot, starts immediately) or *lazy* (cold, starts when has active subscriptions) 
-* **isolate** (default: `true`) - build-in `isolate` mechanics
-* **isolateProp** (default: `_namespace`) - prop name that is attached to request object to *isolate* it
-* **isolateMap** (default: `_ => _`) - how map request in `isolateSink` (`normalizeRequest` will be used instead)
-* **isolateSink** - use custom `isolateSink` method
-* **isolateSource** - use custom `isolateSource` method
-* **selectorMethod** (default: `select`) - custom name of selector method, if `false` helper is not attached
-* **selectorProp** (default: `category`) - custom name of selector property, if`false` helper is not attached
-* **flatten** (default: ['success', 'failure']) - custom names for flattening (merge latest) helpers, if`false` helpers are not attached
-* **flattenAll** (default: ['successAll', 'failureAll']) - custom names for flattening (merge all) helpers, if`false` helpers are not attached
-
-## Filtering helper (`select`) 
-Useful for easier filtering `responses$` by `request` properties, you can filter request object either: 
-* by default driver property (`category` by default if not set custom)
-* by provider property  (first parameter to `select`, second is match)
-* by multiple properties providing object {....}
-
-If `match` param **can be RegExp** then `match.test` function will be used for testing,
-or it can be a **testing function** itself,  otherwise `request` property will be checked 
-for **strict equality** with `match` param.
-
-Technically this helper just applies advanced `filter` on `request` property of `response$$` stream.
-
-## Flattening helpers (`success`, `failure`, `successAll`, `failureAll`)
-Useful for dealing with async responses errors, it also allows you to get access to corresponding request.
-So may not bother of *catching* errors and get uninterrupted stream of *successes* or *errors*.  
+Stream returned by `select()` is a metastream of responses. This means
+that each element of it is a stream itself, so it is **a stream of streams**
+and usually referred as `response$$` (stream of `response$`). 
+Each element of it is `response$` stream that produces resulting values 
+originated from particular request you send to driver sink (`request$`). 
 
 ```js
-const main = ({asyncDriver}) => {
-    // get only `first` `class` failure responses
-    const firstFailed$ = asyncDriver        
-        .select('class', 'first') // if two params passed, first is treated as selector prop name
-        .failure((e, request) => `failure for mark ${request.mark}`) // you can provider mapping function into helper
-    
-    // get only `second` `class` success responses
-    const secondSuccessul$ = asyncDriver
-    .select({'class': 'second'})
-    .filter(r$ => r$.request.mark[0] === 'T' )
-    .success((response, request) => {...}) // notice that you can use helpers after filtering
-    
-    return {
-      // we send some requests to driver
-      asyncDriver: O.from([
-        {mark: 'BMW', class: 'first'},
-        {mark: 'Mercedess', class: 'first'},
-        {mark: 'Toyota', class: 'second'}
-      ]),       
-    }
-  }
+// to get plain response data you should flatten metastream of repsonses
+Driverstream
+  .select('something-special') // returns metastream of responses (response$$)
+  .mergeAll() // gets flatten stream of repsonses data
 ```
 
-Technically `success` helper just *catches* errors on the `response$` stream 
-and turns them into `empty` stream, so consumer just don't see them, 
-and `failure` helper does vice versa.
+Each `response$` has attached 
+property `request` (default name) which contains corresponding 
+*normalized* request. In simple case this stream produces only 
+one resulting value (actual response data). In case of *progressive* response
+it may produce multiple values before completion. 
 
-`success` and `failure` get only latest response, `successAll` and `failureAll` 
-merge all responses results.
-
-## Pull helper (`pull`)
-**Experimental.* Allow to initialize pulling from driver.  
-```js
-    db.pull({find: {...}}, interval(1000))
-```
-
-```js   
-  HTTP.pull('/api/tasks', interval(5000)).success(...)
-```
-
-## External use of helpers (with other async drivers)
-You can use it for example with official `HTTP` driver, like detached helper functions:  
+Also driver source has method `filter` witch takes filtering function for 
+`response$$` metastream and  returns *filtered* driver source.
 
 ```js
-import {success, failure, select} from 'cycle-async-driver'
-...
-
-let allSuccessful$ = success(select(HTTP, 'url', '/api/users'))
-let filteredFailed$ = failure(HTTP.filter(...))
-
-// or
-
-let allSuccessful$ = HTTP
-    .let(select({method: 'POST', url: /users/}))
-    .let(success)
-
-let filteredFailed$ = HTTP.filter(...).let(failure)
-
-// or
-let allSuccessful$ = HTTP.let(success(respose => ...))
-
-let filteredFailed$ = HTTP.filter(...)
-  .let(select({method: 'POST', url: /users/}))
-  .let(failure((error, request) => ...))
-
+// is some cases you may want to get filtered source
+Driverstream
+  .filter(r$$ => r$$.request.method === 'DELETE') // returns filtered driver source
+  .select() // gets all response$$ stream  
 ```
 
-To use fluent API you can attach this helpers to driver it self:
+Each of `response$` streams 
+**potentially may produce an error** which should be [properly handled](#requests-error-handling). 
+Metastream `response$$` will produce an error only if `request$` 
+produces it and will **end** when `request$` stream completes.  
+
+#### Isolation
+
+By default driver source will provider 
+[standard isolation](https://github.com/cyclejs/cyclejs/tree/master/isolate) 
+strategy based on scoped namespaces. For this to each `request` object 
+passed though isolated component boundaries isolation scope value
+is attached to it using special property `_namespace` (default name). 
+Isolated driver source will automatically filter responses 
+corresponding to requests belonging to isolation scope. 
+So parent components **have access to isolated child's** responses. 
+
+#### Requests error handling
+
+As it was said that `select()` method returns metastream of responses
+(`response$$`), which produces response streams (`response$`) each of which 
+may produce an error if something goes wrong while performing request.
+
+It was mentioned also that to for responses you need eventually to flatten 
+metastream of responses. But **notice** that if you handle/catch an error 
+on the flattened `response$$` like that:
+ ```js
+ // rxjs
+ yourDriver
+   .select() // responses$$ stream
+   .mergeAll() // flatten stream of all plain responses
+   .catch(error => of({error})) // replace the error
+   // this stream will not have exception 
+   // but will end right after first error caught
+ ```
+the stream will be completed and you **won't get there anything after first error**.
+  
+So usually for proper handling you need to handle error 
+on each response stream (`response$`), for example like that:
+ 
 ```js
-import {attachHelpers} from 'cycle-async-driver'
+// xstream
+yourDriver
+  .select() // responses$$ stream
+  .map(r$ => r$ // catch error for each response$
+    .map(success => ({success}))
+    .replaceError(error => ({error}))
+  )
+```
 
-...
+One of the recommended methods of dealing with successful and failed
+requests from driver is to use simple helpers that will leave 
+requests with needed result:
 
-const httpDriver = makeHTTPDriver({eager: true}) 
-// you can use custom helpers name
-httpDriver = attachHelpers(httpDriver, {
-  flatten: ['successful', 'failed'],
-  selectorMethod: 'onlyIf' // if `false` will not attach 
-}) 
+```js
+// rxjs 
+let failure = r$ => r$.skip().catch(of)
+let success = r$ => r$.catch(empty)
+```
 
-...
+```js
+// xstream
+let failure = r$ => r$.drop().replaceError(xs.of)
+let success = r$ => r$.replaceError(xs.empty)
+```
 
-const main = ({DOM, HTTP}) => {
-  let usersPostSuccessful$ = HTTP
-    .onlyIf({url: /users/, method: 'POST'}) // you can use object to match more then one property in request
-    .successful()
-  let filteredFailed$ = HTTP.filter(...).failed()
+Then you can get only successful responses without errors:
+```js
+// rxjs
+HTTP.select()
+  .flatMapLatest(success)
+```
+```js
+// xstream
+HTTP.select()
+  .map(success)
+  .flatten() 
+```
+
+#### Accessing response/request pairs
+Sometimes you may find yourself in a need to access corresponding
+response and request pairs, to do this follow such approach:
+
+```js       
+  const getPairs = r$ => r$.map(res => ({res, req: r$.request}))  
+  // get all succesfful response/request pairs
+  let goodResReqPair$ = asyncDriver.select()
+    .map(success)
+    .map(getPairs)
+    .mergeAll()      
+```
+You can even create something like that:
+```js       
+  // create such success mapper factory
+  const success = (mapper = (_ => _)) => 
+    r$ => r$.catch(empty).map(res => mapper(res, r$.request))
   ...
-} 
+  // map succesfful response/request pair to something
+  let goodReqResMapped$ = asyncDriver.select()
+    .flatMap(success(
+      (response, request) => ...
+    ))              
+```
+*It is all functional approach. Compose functions as you feel it needs to be.*
 
-run(main, {
-  DOM: makeDOMDriver()
-  HTTP: httpDriver
+#### Lazy drivers and requests
+
+By default **all requests are eager** (start to perform a side effect just after 
+they get "into" the driver) and response streams (which correspond to particular request)
+are **hot (multicated)** and **remembered** (has short memory) which means 
+that any number of subscriber may listen to response stream  and while only one request will be performed 
+all the subscribers will get response value(s), even late subscribers will 
+get the **one last value** from response stream 
+(you should consider this when dealing with progressive responses).
+ 
+Lazy request on the other hand starts performing side effect 
+when they get subscriber. Depending of the stream library you use
+for lazy requests you will get either cold (*rxjs*, *most*) 
+or hot (*xstream* - where all streams are hot) `response$` stream. 
+
+Note that if you subscribe to lazy and **cold stream** (`response$`) in you app, 
+**request will start to be performed each time you subscribe** to it, 
+this thing is very important to consider (when using rx.js, most.js).
+
+To get lazy driver just pass `lazy` option set to `true`, so all requests by default will be lazy:
+```js
+let readFileDriver = makeAsyncDriver({
+  getResponse: request, callback) => {
+    fs.readFile(requst.path, request.encoding || 'utf-8', callback)   
+  },
+  lazy: true
 })
 ```
 
-## Install 
-`npm install cycle-async-driver -S`
+Or you can always override driver setting and make any request *lazy* (or *eager*) if required 
+by adding `lazy: true` (or `lazy: false`) option to the request inside your app's logic:
+```js
+  readFile: O.of({
+   path: '/path/to/file/to/read',
+   lazy: true
+  }),
+```
+
+#### Cancellation (and abortion)
+Basically, when you want request to be cancelled you should 
+stop listening to corresponding `response$` (response stream).
+By default request in drivers are *eager* thus start without 
+subscription in you apps logic.
+
+That said request cancellation **works only for *lazy* requests** because such requests
+start on subscription creation and may be cancelled/aborted if subscription
+is dropped before request is finished to performed.
+
+Often automatic subscription drop is done using flattening the stream of responses 
+to the latest response:  
+ 
+```js
+// rxjs
+myCoolDriver
+  .select('something_special')
+  .flatMapLatest() // or .switch()
+  .map(...)
+  // so here you will get only responses from last request started
+  // you won't see responses of the requets that started before 
+  // the last one and were not finished before  
+```
+ 
+ If you want to implement driver that on cancellation makes 
+ some action - for example aborts not completed requests, you should 
+ follow this approach:
+ 
+```js
+import {makeAsyncDriver} from 'cycle-async-driver'
+ 
+// this example also shows you how to use `getProgressiveResponse`
+// say we have some `coolSource` to which we can make requests
+// and get some response stream back, 
+// and we want translate it to a cycle driver
+let myCoolDriver = makeAsyncDriver({
+  getProgressiveResponse: (request, observer, onDispose) => {  
+    const coolRequest = coolSource.makeRequest(request, (coolStream) => {
+      coolStream.on('data', observer.next)
+      coolStream.on('error', observer.error)
+      coolStream.on('end', observer.completed)
+    })
+    // third param of `getResponse` or `getProgressiveResponse`
+    // is a function `onDispose` that takes
+    // a handler which will be called when no listeners 
+    // is needing response for this request anymore,   
+    // in this case if it happens before the request is completed 
+    // you may want to abort it
+    
+    onDispose(() => !coolRequest.isCompleted() && coolRequest.abort())   
+  }
+})
+```
+Note that `onDispose` handler will be called always when request completed successfully.
 
 ## Tests
 ```
