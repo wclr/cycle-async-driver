@@ -42,17 +42,17 @@ containing more then one value. **required** (if no `getResponse`)
 
 - `normalizeRequest` *(Function)*: transform function that will be applied to the request before handling.
 
-- `requestProp` *(String)*: name of the property that will be attached to every response stream. *default value: **request***
+- `requestProp` *(String)*: name of the property that will be attached to every response stream. *default value: `request`*
 
-- `isolate` *(Boolean)*: makes driver ready to work with [`@cycle/isolate`](#isolation). *default value: **true***
+- `isolate` *(Boolean)*: makes driver ready to work with [`@cycle/isolate`](#isolation). *default value: `true`*
 
 - `isolateNormalize` *(Function)*: transform function that will be 
 applied to the request before its isolation, if not present `normalizeRequest` will be used instead.
 
-- `isolateProp` *(String)*:  name of the property that will be used for keeping isolation namespace. *default value: **_namespace***
+- `isolateProp` *(String)*:  name of the property that will be used for keeping isolation namespace. *default value: `namespace`*
 
 - `lazy` *(Boolean)*: makes all driver requests [lazy](#lazy-drivers-and-requests) by default, 
-can be overridden by particular request options. *default value: **false***
+can be overridden by particular request options. *default value: `false`*
 
 ## Usage
 
