@@ -8,6 +8,7 @@
     "async"
   ],
   "main": "lib/index.js",
+  "types": "index.d.ts",
   "scripts": {
     "clean": "rimraf lib",
     "build": "npm run clean && babel src -d lib",
@@ -34,7 +35,7 @@
     "most": "^1.0.1",
     "rx": "^4.0.7",
     "tape": "^4.4.0",
-    "xstream": "^2.6.2"
+    "xstream": "^6.1.0"
   },
   "standard": {
     "parser": "babel-eslint"

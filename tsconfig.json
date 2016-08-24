@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "removeComments": false,
+    "strictNullChecks": true,
+    "declaration": false,
+    "target": "es5",
+    "preserveConstEnums": true,
+    "noImplicitAny": false,
+    "outDir": "lib",
+    "noLib": false,
+    "sourceMap": true    
+  },
+    "formatCodeOptions": {
+    "indentSize": 2,
+    "tabSize": 2
+  },  
+  "exclude": [
+    "node_modules",
+    ".vscode-test"
+  ]
+}

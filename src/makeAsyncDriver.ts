@@ -6,7 +6,7 @@ const makeAsyncDriver = (options) => {
     getResponse,
     getProgressiveResponse,
     requestProp = 'request',
-    normalizeRequest = null,
+    normalizeRequest,
     isolate = true,
     isolateProp = '_namespace',
     isolateNormalize = null,
@@ -53,9 +53,9 @@ const makeAsyncDriver = (options) => {
             const disposeCallback = (_) => dispose = _
             if (getProgressiveResponse) {
               const contextFreeObserver = {
-                next: ::observer.next,
-                error: ::observer.error,
-                complete: ::observer.complete
+                next: observer.next.bind(observer),
+                error: observer.error.bind(observer),
+                complete: observer.complete.bind(observer)
               }
               getProgressiveResponse(
                 requestNormalized, contextFreeObserver, disposeCallback
@@ -90,8 +90,8 @@ const makeAsyncDriver = (options) => {
           }
           observer.next(response$)
         },
-        error: ::observer.error,
-        complete: ::observer.complete
+        error: observer.error.bind(observer),
+        complete: observer.complete.bind(observer)
       })
     })
     response$$ = runStreamAdapter.remember(response$$)

@@ -1,2 +1,12 @@
+# Editor-specific
 .idea
+
+# Installed libs
 node_modules
+typings
+
+# Generated
+dist/
+
+# Misc
+npm-debug.log

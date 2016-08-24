@@ -3,12 +3,12 @@ const makeFilter = (streamAdapter) =>
     streamAdapter.adapt({}, (_, observer) =>
       streamAdapter.streamSubscribe(stream, {
         next: (r$) => {
-          if (predicate(r$)){
+          if (predicate(r$)) {
             observer.next(r$)
           }
         },
-        error: ::observer.error,
-        complete: ::observer.complete
+        error: observer.error.bind(observer),
+        complete: observer.complete.bind(observer)
       })
     )
 
@@ -21,43 +21,43 @@ const makeDriverSource = (response$$, options) => {
     isolate,
     isolateProp,
     isolateNormalize
-    }  = options
+  } = options
 
   let filterStream = makeFilter(runStreamAdapter)
 
   let driverSource = {
-    filter (predicate) {
-      const filteredResponse$$ = filterStream(response$$, predicate)
+    filter(predicate): any {
+      const filteredResponse$$ = filterStream(
+        response$$, (r$) => predicate(r$.request)
+      )
       return makeDriverSource(filteredResponse$$, options)
-    }
-  }
-
-  if (isolate){
-    driverSource.isolateSink = (request$, scope) => {
+    },
+    isolateSink(request$, scope) {
       return request$.map(req => {
         req = isolateNormalize ? isolateNormalize(req) : req
         req[isolateProp] = req[isolateProp] || []
         req[isolateProp].push(scope)
         return req
       })
-    }
-    driverSource.isolateSource = (source, scope) => {
+    },
+    isolateSource: (source, scope) => {
       let requestPredicate = (req) => {
         return Array.isArray(req[isolateProp]) &&
           req[isolateProp].indexOf(scope) !== -1
       }
-      return source.filter(r$ => requestPredicate(r$[requestProp]))
-    }
-  }
-  if (selectHelperName) {
-    driverSource[selectHelperName] = (selectBy) => {
-      if (!selectBy){
+
+      return source.filter(requestPredicate)
+    },
+    select(category) {
+      if (!category) {
         return response$$
       }
-      let requestPredicate = typeof selectBy === 'string'
-        ? (req) => req && req[selectDefaultProp] === selectBy
-        : selectBy
-      return response$$.filter(r$ => requestPredicate(r$[requestProp]))
+      if (typeof category !== 'string') {
+        throw new Error(`category should be a string`)
+      }
+      let requestPredicate =
+        (request) => request && request.category === category
+      return driverSource.filter(requestPredicate).select()
     }
   }
   return driverSource
