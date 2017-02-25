@@ -71,7 +71,7 @@ const makeAsyncDriver = (options) => {
               }
               let res = getResponse(request, callback, disposeCallback)
               if (res && isFunction(res.then)){
-                res.then((result) => callback(null, result), callback)
+                res.then((result) => callback(null, result)).catch(callback)
               }
             }
             return () => {
